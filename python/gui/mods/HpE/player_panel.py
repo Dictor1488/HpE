@@ -31,9 +31,14 @@ class HpPanelMeta(BaseDAAPIComponent):
     def flashLogS(self, *data):
         logger.debug('Flash: %s', data)
 
-    def as_setVehicleHealthS(self, vehicleID, currentHealth, maxHealth):
+    def as_setVehicleHealthS(self, vehicleID, currentHealth, maxHealth, vehicleClass=''):
         if self._isDAAPIInited():
-            return self.flashObject.as_setVehicleHealth(vehicleID, currentHealth, maxHealth)
+            return self.flashObject.as_setVehicleHealth(
+                vehicleID,
+                currentHealth,
+                maxHealth,
+                vehicleClass or ''
+            )
         return None
 
     def as_refreshAllS(self):
@@ -67,11 +72,16 @@ class Events(object):
         self.viewLoad = False
         self.viewRequested = False
 
-    def setVehicleHealth(self, vehicleID, currentHealth, maxHealth):
+    def setVehicleHealth(self, vehicleID, currentHealth, maxHealth, vehicleClass=''):
         if self.componentUI is None:
             return
         try:
-            self.componentUI.as_setVehicleHealthS(int(vehicleID), int(currentHealth), int(maxHealth))
+            self.componentUI.as_setVehicleHealthS(
+                int(vehicleID),
+                int(currentHealth),
+                int(maxHealth),
+                vehicleClass or ''
+            )
         except Exception:
             logger.exception('setVehicleHealth failed for %s', vehicleID)
 
