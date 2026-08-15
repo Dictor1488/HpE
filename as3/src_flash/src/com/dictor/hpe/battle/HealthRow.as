@@ -12,9 +12,13 @@ package com.dictor.hpe.battle
    {
       public static const BAR_WIDTH:Number = 82;
       public static const BAR_HEIGHT:Number = 6;
+      public static const SEGMENT_COUNT:int = 4;
+      public static const SEGMENT_GAP:Number = 2;
+      public static const SEGMENT_WIDTH:Number = (BAR_WIDTH - SEGMENT_GAP * (SEGMENT_COUNT - 1)) / SEGMENT_COUNT;
       public static const TEXT_WIDTH:Number = 38;
-      public static const TOTAL_WIDTH:Number = BAR_WIDTH + TEXT_WIDTH + 5;
-      public static const TOTAL_HEIGHT:Number = 22;
+      public static const TEXT_GAP:Number = 5;
+      public static const TOTAL_WIDTH:Number = BAR_WIDTH + TEXT_WIDTH + TEXT_GAP;
+      public static const TOTAL_HEIGHT:Number = 20;
 
       private var _bg:Shape;
       private var _fill:Shape;
@@ -37,7 +41,7 @@ package com.dictor.hpe.battle
          _text.mouseEnabled = false;
          _text.selectable = false;
          _text.multiline = false;
-         _text.height = 20;
+         _text.height = TOTAL_HEIGHT;
          _text.width = TEXT_WIDTH;
          _text.autoSize = TextFieldAutoSize.NONE;
          _text.filters = [new DropShadowFilter(0, 90, 0x000000, 1.0, 2, 2, 2, 1)];
@@ -53,6 +57,7 @@ package com.dictor.hpe.battle
          _enemy = enemy;
          currentHealth = Math.max(0, currentHealth);
          maxHealth = Math.max(0, maxHealth);
+
          var ratio:Number = maxHealth > 0 ? Math.min(1, Number(currentHealth) / Number(maxHealth)) : 0;
          redraw(ratio);
          _text.text = String(currentHealth);
@@ -62,24 +67,37 @@ package com.dictor.hpe.battle
 
       private function redraw(ratio:Number):void
       {
-         var barX:Number = _enemy ? TEXT_WIDTH + 5 : 0;
-         var textX:Number = _enemy ? 0 : BAR_WIDTH + 5;
-         var barY:Number = 8;
+         var barX:Number = _enemy ? TEXT_WIDTH + TEXT_GAP : 0;
+         var textX:Number = _enemy ? 0 : BAR_WIDTH + TEXT_GAP;
+         var barY:Number = 7;
+         var pitch:Number = SEGMENT_WIDTH + SEGMENT_GAP;
 
          _bg.graphics.clear();
-         _bg.graphics.lineStyle(1, 0x000000, 0.9);
-         _bg.graphics.beginFill(0x151515, 0.82);
-         _bg.graphics.drawRect(barX, barY, BAR_WIDTH, BAR_HEIGHT);
-         _bg.graphics.endFill();
-
          _fill.graphics.clear();
-         if (ratio > 0)
+
+         for (var i:int = 0; i < SEGMENT_COUNT; ++i)
          {
-            _fill.graphics.beginFill(0x67D34A, 1.0);
+            var visualIndex:int = _enemy ? SEGMENT_COUNT - 1 - i : i;
+            var segmentX:Number = barX + visualIndex * pitch;
+
+            _bg.graphics.lineStyle(1, 0x000000, 0.9);
+            _bg.graphics.beginFill(0x151515, 0.82);
+            _bg.graphics.drawRect(segmentX, barY, SEGMENT_WIDTH, BAR_HEIGHT);
+            _bg.graphics.endFill();
+
+            var localFill:Number = ratio * SEGMENT_COUNT - i;
+            localFill = Math.max(0, Math.min(1, localFill));
+            if (localFill <= 0)
+               continue;
+
+            var innerWidth:Number = SEGMENT_WIDTH - 2;
+            var fillWidth:Number = innerWidth * localFill;
+            var fillX:Number = segmentX + 1;
             if (_enemy)
-               _fill.graphics.drawRect(barX + BAR_WIDTH * (1.0 - ratio), barY + 1, BAR_WIDTH * ratio, BAR_HEIGHT - 2);
-            else
-               _fill.graphics.drawRect(barX + 1, barY + 1, Math.max(0, BAR_WIDTH * ratio - 1), BAR_HEIGHT - 2);
+               fillX += innerWidth - fillWidth;
+
+            _fill.graphics.beginFill(0x67D34A, 1.0);
+            _fill.graphics.drawRect(fillX, barY + 1, fillWidth, BAR_HEIGHT - 2);
             _fill.graphics.endFill();
          }
 
