@@ -1,4 +1,4 @@
-name: Build and Release .wotmod
+name: Build and Release HpE
 
 on:
   push:
@@ -6,348 +6,176 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
+      version:
+        description: 'Mod version'
+        required: true
+        default: '0.1.4'
       build_swf:
         description: 'Build SWF files'
         required: true
         type: boolean
         default: true
-      version:
-        description: 'Mod Version'
-        required: true
-        default: '0.1.0'
-      mod_id:
-        description: 'Mod ID'
-        required: true
-        default: 'me.dictor1488.hpe'
-      mod_name:
-        description: 'Mod Name'
-        required: true
-        default: 'HpE'
-      mod_description:
-        description: 'Mod Description'
-        required: true
-        default: 'Vehicle HP bars, HP values and class-colored vehicle icons in battle players panels'
-      game_version:
-        description: 'World of Tanks version'
-        required: true
-        default: '2.2.0.2'
 
 permissions:
   contents: write
 
 env:
-  FLEX_VERSION: "4.16.1"
-  FLASH_PLAYER_VERSION: "32.0"
-  SWF_VERSION: "39"
+  FLEX_VERSION: '4.16.1'
+  FLASH_PLAYER_VERSION: '32.0'
+  SWF_VERSION: '39'
+  MOD_ID: 'me.inq.hpe'
+  MOD_NAME: 'HpE'
 
 jobs:
   build-and-release:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install Python 2.7 via Chocolatey
-      shell: pwsh
-      run: |
-        choco install python2 -y --no-progress
-        Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-        refreshenv
-
-        $candidates = @(
-          "C:\Python27\python.exe",
-          "C:\tools\python2\python.exe",
-          "C:\ProgramData\chocolatey\bin\python2.exe"
-        )
-        $python2 = $candidates |
-          Where-Object { Test-Path -LiteralPath $_ } |
-          Select-Object -First 1
-
-        if (-not $python2) {
-          $command = Get-Command python2.exe -ErrorAction SilentlyContinue
-          if ($command) {
-            $python2 = $command.Source
-          }
-        }
-
-        if (-not $python2) {
-          Write-Error "Python 2.7 was installed, but its executable could not be located."
-          exit 1
-        }
-
-        $python2 = (Resolve-Path -LiteralPath $python2).Path
-        "PYTHON2_EXE=$python2" >> $env:GITHUB_ENV
-        Write-Host "Python 2 executable: $python2"
-        & $python2 --version
-
-    - name: Install Java (required for Flex SDK)
-      if: inputs.build_swf == true || github.event_name == 'push'
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '11'
-
-    - name: Cache Flex SDK
-      if: inputs.build_swf == true || github.event_name == 'push'
-      id: cache-flex
-      uses: actions/cache@v4
-      with:
-        path: C:\flex-sdk
-        key: flex-sdk-${{ env.FLEX_VERSION }}-v2
-
-    - name: Download and Setup Apache Flex SDK
-      if: (inputs.build_swf == true || github.event_name == 'push') && steps.cache-flex.outputs.cache-hit != 'true'
-      shell: pwsh
-      run: |
-        Write-Host "Downloading Apache Flex SDK ${{ env.FLEX_VERSION }}..."
-
-        $flexUrls = @(
-          "https://archive.apache.org/dist/flex/${{ env.FLEX_VERSION }}/binaries/apache-flex-sdk-${{ env.FLEX_VERSION }}-bin.zip",
-          "https://dlcdn.apache.org/flex/${{ env.FLEX_VERSION }}/binaries/apache-flex-sdk-${{ env.FLEX_VERSION }}-bin.zip"
-        )
-
-        $downloaded = $false
-        foreach ($url in $flexUrls) {
-          try {
-            Write-Host "Trying: $url"
-            Invoke-WebRequest -Uri $url -OutFile "flex-sdk.zip" -UseBasicParsing -TimeoutSec 300
-            $downloaded = $true
-            break
-          } catch {
-            Write-Host "Failed: $_"
-          }
-        }
-
-        if (-not $downloaded) {
-          Write-Error "Could not download Flex SDK"
-          exit 1
-        }
-
-        Remove-Item "C:\flex-sdk" -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item "C:\flex-sdk-temp" -Recurse -Force -ErrorAction SilentlyContinue
-        New-Item -ItemType Directory -Force -Path "C:\flex-sdk" | Out-Null
-        Expand-Archive -Path "flex-sdk.zip" -DestinationPath "C:\flex-sdk-temp" -Force
-
-        $extractedItems = @(Get-ChildItem "C:\flex-sdk-temp")
-        if ($extractedItems.Count -eq 1 -and $extractedItems[0].PSIsContainer) {
-          Get-ChildItem "$($extractedItems[0].FullName)" | Move-Item -Destination "C:\flex-sdk" -Force
-        } else {
-          Get-ChildItem "C:\flex-sdk-temp" | Move-Item -Destination "C:\flex-sdk" -Force
-        }
-
-        Remove-Item "flex-sdk.zip" -Force -ErrorAction SilentlyContinue
-        Remove-Item "C:\flex-sdk-temp" -Recurse -Force -ErrorAction SilentlyContinue
-
-        if (-not (Test-Path "C:\flex-sdk\bin\mxmlc.bat")) {
-          Write-Error "mxmlc was not found after Flex SDK extraction"
-          exit 1
-        }
-
-    - name: Setup playerglobal.swc
-      if: inputs.build_swf == true || github.event_name == 'push'
-      shell: pwsh
-      run: |
-        Write-Host "Setting up playerglobal.swc from project libs..."
-
-        $libsPlayerGlobal = "as3\libs\playerglobal.swc"
-        if (-not (Test-Path $libsPlayerGlobal)) {
-          Write-Error "playerglobal.swc not found at: $libsPlayerGlobal"
-          exit 1
-        }
-
-        $versions = @("32.0")
-        foreach ($v in $versions) {
-          $vDir = "C:\flex-sdk\frameworks\libs\player\$v"
-          New-Item -ItemType Directory -Force -Path $vDir | Out-Null
-          Copy-Item $libsPlayerGlobal "$vDir\playerglobal.swc" -Force
-        }
-        Copy-Item $libsPlayerGlobal "C:\flex-sdk\frameworks\libs\player\playerglobal.swc" -Force
-
-        $flexConfig = "C:\flex-sdk\frameworks\flex-config.xml"
-        if (Test-Path $flexConfig) {
-          $content = Get-Content $flexConfig -Raw
-          $content = $content -replace '\{playerglobalHome\}', 'C:/flex-sdk/frameworks/libs/player'
-          $content | Set-Content $flexConfig -Encoding UTF8
-        }
-
-    - name: Determine Version and Mod Info
-      shell: pwsh
-      run: |
-        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-          $version = "${{ inputs.version }}"
-          $modId = "${{ inputs.mod_id }}"
-          $modName = "${{ inputs.mod_name }}"
-          $modDescription = "${{ inputs.mod_description }}"
-          $gameVersion = "${{ inputs.game_version }}"
-        } else {
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          $modId = "me.dictor1488.hpe"
-          $modName = "HpE"
-          $modDescription = "Vehicle HP bars, HP values and class-colored vehicle icons in battle players panels"
-          $gameVersion = "2.2.0.2"
-        }
-
-        echo "PROJECT_VERSION=$version" >> $env:GITHUB_ENV
-        echo "MOD_ID=$modId" >> $env:GITHUB_ENV
-        echo "MOD_NAME=$modName" >> $env:GITHUB_ENV
-        echo "MOD_DESCRIPTION=$modDescription" >> $env:GITHUB_ENV
-        echo "GAME_VERSION=$gameVersion" >> $env:GITHUB_ENV
-
-        Write-Host "Version: $version"
-        Write-Host "Mod ID: $modId"
-        Write-Host "Mod Name: $modName"
-        Write-Host "Game Version: $gameVersion"
-
-    - name: Build SWF files
-      if: inputs.build_swf == true || github.event_name == 'push'
-      shell: pwsh
-      run: |
-        $env:Path = "C:\flex-sdk\bin;$env:Path"
-        $mxmlcPath = "C:\flex-sdk\bin\mxmlc.bat"
-        if (-not (Test-Path $mxmlcPath)) {
-          Write-Error "mxmlc not found at $mxmlcPath"
-          exit 1
-        }
-
-        $as3Root = "as3"
-        $srcFlash = "$as3Root/src_flash"
-        $libsPath = "$as3Root/libs"
-        $outputPath = "as3/bin"
-        New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
-
-        $libArgs = @()
-        Get-ChildItem -Path $libsPath -Filter "*.swc" -Recurse | ForEach-Object {
-          Write-Host "  - $($_.Name)"
-          if ($_.Name -eq "playerglobal.swc") {
-            $libArgs += "-library-path+=$($_.FullName)"
-          } else {
-            $libArgs += "-external-library-path+=$($_.FullName)"
-          }
-        }
-
-        $projects = @(Get-ChildItem -Path $srcFlash -Filter "*.as3proj" -Recurse)
-        if ($projects.Count -eq 0) {
-          Write-Error "No .as3proj files found in $srcFlash"
-          exit 1
-        }
-
-        foreach ($proj in $projects) {
-          $projDir = $proj.DirectoryName
-          [xml]$projXml = Get-Content $proj.FullName
-
-          $swfName = "output.swf"
-          $outputNode = $projXml.project.output.movie | Where-Object { $_.path -and $_.path -ne "" }
-          if ($outputNode) {
-            $swfName = $outputNode.path
-          }
-
-          $sourcePaths = @()
-          $srcDir = Join-Path $projDir "src"
-          if (Test-Path $srcDir) {
-            $sourcePaths += $srcDir
-          }
-
-          $projXml.project.classpaths.class | ForEach-Object {
-            if ($_.path) {
-              $cp = Join-Path $projDir $_.path
-              if (Test-Path $cp) {
-                $sourcePaths += $cp
-              }
-            }
-          }
-
-          $mainClassPath = $null
-          $projXml.project.compileTargets.compile | ForEach-Object {
-            if ($_.path) {
-              $mainClassPath = Join-Path $projDir $_.path
-            }
-          }
-
-          if (-not $mainClassPath -or -not (Test-Path $mainClassPath)) {
-            Write-Error "Could not find main class file for $($proj.Name)"
-            exit 1
-          }
-
-          $outputSwf = Join-Path $outputPath $swfName
-          $mxmlcArgs = @()
-          foreach ($sp in $sourcePaths) {
-            $mxmlcArgs += "-source-path+=$sp"
-          }
-          $mxmlcArgs += $libArgs
-          $mxmlcArgs += @(
-            "-output=$outputSwf",
-            "-target-player=${{ env.FLASH_PLAYER_VERSION }}",
-            "-swf-version=${{ env.SWF_VERSION }}",
-            "-strict=true",
-            "-optimize=true",
-            "-warnings=true",
-            "--"
+      - name: Install Python 2.7
+        shell: pwsh
+        run: |
+          choco install python2 -y --no-progress
+          Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+          refreshenv
+          $candidates = @(
+            'C:\Python27\python.exe',
+            'C:\tools\python2\python.exe',
+            'C:\ProgramData\chocolatey\bin\python2.exe'
           )
-          $mxmlcArgs += $mainClassPath
-
-          $process = Start-Process -FilePath $mxmlcPath -ArgumentList $mxmlcArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput "mxmlc_out.txt" -RedirectStandardError "mxmlc_err.txt"
-          $stdout = Get-Content "mxmlc_out.txt" -Raw -ErrorAction SilentlyContinue
-          $stderr = Get-Content "mxmlc_err.txt" -Raw -ErrorAction SilentlyContinue
-          if ($stdout) { Write-Host $stdout }
-          if ($stderr) { Write-Host $stderr -ForegroundColor Yellow }
-          if ($process.ExitCode -ne 0) {
-            Write-Error "Compilation failed for $swfName (exit code: $($process.ExitCode))"
-            exit 1
+          $python2 = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $python2) {
+            $cmd = Get-Command python2.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $python2 = $cmd.Source }
           }
-          if (-not (Test-Path $outputSwf)) {
-            Write-Error "Output file not created: $outputSwf"
-            exit 1
+          if (-not $python2) { throw 'Python 2.7 executable was not found' }
+          $python2 = (Resolve-Path -LiteralPath $python2).Path
+          "PYTHON2_EXE=$python2" >> $env:GITHUB_ENV
+          & $python2 --version
+
+      - name: Set up Java
+        if: inputs.build_swf == true || github.event_name == 'push'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Cache Flex SDK
+        if: inputs.build_swf == true || github.event_name == 'push'
+        id: cache-flex
+        uses: actions/cache@v4
+        with:
+          path: C:\flex-sdk
+          key: flex-sdk-${{ env.FLEX_VERSION }}-hpe-v2
+
+      - name: Download Apache Flex SDK
+        if: (inputs.build_swf == true || github.event_name == 'push') && steps.cache-flex.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $url = 'https://archive.apache.org/dist/flex/${{ env.FLEX_VERSION }}/binaries/apache-flex-sdk-${{ env.FLEX_VERSION }}-bin.zip'
+          Invoke-WebRequest -Uri $url -OutFile flex.zip -UseBasicParsing -TimeoutSec 300
+          Remove-Item C:\flex-sdk -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item C:\flex-temp -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path C:\flex-sdk | Out-Null
+          Expand-Archive flex.zip -DestinationPath C:\flex-temp -Force
+          $items = @(Get-ChildItem C:\flex-temp)
+          if ($items.Count -eq 1 -and $items[0].PSIsContainer) {
+            Get-ChildItem $items[0].FullName | Move-Item -Destination C:\flex-sdk -Force
+          } else {
+            Get-ChildItem C:\flex-temp | Move-Item -Destination C:\flex-sdk -Force
           }
-        }
+          Remove-Item flex.zip -Force
+          Remove-Item C:\flex-temp -Recurse -Force
+          if (-not (Test-Path 'C:\flex-sdk\bin\mxmlc.bat')) { throw 'mxmlc.bat is missing' }
 
-    - name: Create build.json
-      shell: pwsh
-      run: |
-        $jsonContent = @{
-          python2 = ""
-          info = @{
-            id = "${{ env.MOD_ID }}"
-            version = "${{ env.PROJECT_VERSION }}"
-            name = "${{ env.MOD_NAME }}"
-            description = "${{ env.MOD_DESCRIPTION }}"
+      - name: Configure playerglobal
+        if: inputs.build_swf == true || github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $source = 'as3\libs\playerglobal.swc'
+          if (-not (Test-Path $source)) { throw 'as3/libs/playerglobal.swc is missing' }
+          $dest = 'C:\flex-sdk\frameworks\libs\player\32.0'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item $source "$dest\playerglobal.swc" -Force
+          Copy-Item $source 'C:\flex-sdk\frameworks\libs\player\playerglobal.swc' -Force
+          $config = 'C:\flex-sdk\frameworks\flex-config.xml'
+          if (Test-Path $config) {
+            $text = Get-Content $config -Raw
+            $text = $text -replace '\{playerglobalHome\}', 'C:/flex-sdk/frameworks/libs/player'
+            $text | Set-Content $config -Encoding UTF8
           }
-        } | ConvertTo-Json -Depth 4
-        $jsonContent | Out-File -FilePath build.json -Encoding UTF8
-        Get-Content build.json
 
-    - name: Verify build inputs
-      shell: pwsh
-      run: |
-        Write-Host "=== SWF ==="
-        Get-ChildItem -Path "as3/bin" -Filter "*.swf" | ForEach-Object { Write-Host "  $($_.FullName)" }
-        Write-Host "=== Python ==="
-        Get-ChildItem -Path "python" -Filter "*.py" -Recurse | ForEach-Object { Write-Host "  $($_.FullName)" }
+      - name: Compile HpE SWF
+        if: inputs.build_swf == true || github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $mxmlc = 'C:\flex-sdk\bin\mxmlc.bat'
+          if (-not (Test-Path $mxmlc)) { throw 'mxmlc.bat was not found' }
+          New-Item -ItemType Directory -Force -Path as3\bin | Out-Null
 
-    - name: Run Build Script
-      run: python build.py
+          $mxmlcArgs = @(
+            '-source-path+=as3/src_flash/src',
+            '-output=as3/bin/hpePlayerPanel.swf',
+            '-target-player=${{ env.FLASH_PLAYER_VERSION }}',
+            '-swf-version=${{ env.SWF_VERSION }}',
+            '-strict=true',
+            '-optimize=true',
+            '-warnings=true'
+          )
 
-    - name: List build artifacts
-      shell: pwsh
-      run: |
-        Write-Host "=== Final Build Artifacts ==="
-        Get-ChildItem -Path "build" -Recurse | ForEach-Object {
-          $size = if ($_.PSIsContainer) { "[DIR]" } else { "$([math]::Round($_.Length/1KB, 2)) KB" }
-          Write-Host "  $($_.FullName) - $size"
-        }
+          Get-ChildItem as3\libs -Filter *.swc | ForEach-Object {
+            if ($_.Name -eq 'playerglobal.swc') {
+              $mxmlcArgs += "-library-path+=$($_.FullName)"
+            } else {
+              $mxmlcArgs += "-external-library-path+=$($_.FullName)"
+            }
+          }
+          $mxmlcArgs += '--'
+          $mxmlcArgs += (Resolve-Path 'as3/src_flash/src/HpEPanel.as').Path
 
-    - name: Upload to Release
-      uses: ncipollo/release-action@v1.14.0
-      with:
-        tag: "v${{ env.PROJECT_VERSION }}"
-        commit: ${{ github.sha }}
-        artifacts: "build/*.wotmod"
-        allowUpdates: true
-        removeArtifacts: true
-        makeLatest: true
-        token: ${{ secrets.GITHUB_TOKEN }}
+          & $mxmlc @mxmlcArgs
+          if ($LASTEXITCODE -ne 0) { throw "AS3 compilation failed: $LASTEXITCODE" }
+          if (-not (Test-Path 'as3/bin/hpePlayerPanel.swf')) { throw 'SWF output was not created' }
+
+      - name: Prepare build metadata
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq 'workflow_dispatch') {
+            $version = "${{ inputs.version }}"
+          } else {
+            $version = "${{ github.ref_name }}".TrimStart('v')
+          }
+          $jsonContent = @{
+            python2 = ''
+            info = @{
+              id = '${{ env.MOD_ID }}'
+              version = $version
+              name = '${{ env.MOD_NAME }}'
+              description = 'Reference-style mirrored HP display with configurable HP bars and class icon colors'
+            }
+          } | ConvertTo-Json -Depth 4
+          $jsonContent | Out-File -FilePath build.json -Encoding UTF8
+          "PROJECT_VERSION=$version" >> $env:GITHUB_ENV
+          Get-Content build.json
+
+      - name: Build .wotmod
+        shell: pwsh
+        run: python build.py
+
+      - name: Upload to Release
+        uses: ncipollo/release-action@v1.14.0
+        with:
+          tag: v${{ env.PROJECT_VERSION }}
+          commit: ${{ github.sha }}
+          artifacts: 'build/*.wotmod'
+          allowUpdates: true
+          removeArtifacts: true
+          makeLatest: true
+          token: ${{ secrets.GITHUB_TOKEN }}
