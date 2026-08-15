@@ -6,10 +6,11 @@ try:
 except ImportError:
     g_modsSettingsApi = None
 
-MOD_LINKAGE = 'me.dictor1488.hpe'
+MOD_LINKAGE = 'me.inq.hpe'
 
 DEFAULTS = {
     'enabled': True,
+    'showHpBars': True,
     'colorizeIcons': True,
     'colorizeHeavy': False,
     'ltColor': '596E4B',
@@ -39,13 +40,20 @@ class HpESettings(object):
     def initialize(self):
         if self._registered or g_modsSettingsApi is None:
             if g_modsSettingsApi is None:
-                logger.info('HpE ModsSettingsAPI is unavailable; using default icon colors')
+                logger.info('HpE ModsSettingsAPI is unavailable; using default settings')
             return
 
         template = {
             'modDisplayName': u'HpE',
             'enabled': True,
             'column1': [
+                {
+                    'type': 'CheckBox',
+                    'text': u'Показувати смуги HP',
+                    'tooltip': u'{HEADER}Смуги HP{/HEADER}{BODY}Вимкни, щоб у вухах залишалося тільки числове значення HP без чотирьох сегментів.{/BODY}',
+                    'value': DEFAULTS['showHpBars'],
+                    'varName': 'showHpBars'
+                },
                 {
                     'type': 'CheckBox',
                     'text': u'Фарбувати іконки техніки',
@@ -121,6 +129,8 @@ class HpESettings(object):
             return
         if 'enabled' in values:
             self.values['enabled'] = bool(values['enabled'])
+        if 'showHpBars' in values:
+            self.values['showHpBars'] = bool(values['showHpBars'])
         if 'colorizeIcons' in values:
             self.values['colorizeIcons'] = bool(values['colorizeIcons'])
         if 'colorizeHeavy' in values:
@@ -142,6 +152,9 @@ class HpESettings(object):
 
     def isEnabled(self):
         return bool(self.values.get('enabled', True))
+
+    def displaySettings(self):
+        return (bool(self.values.get('showHpBars', True)),)
 
     def iconSettings(self):
         return (
