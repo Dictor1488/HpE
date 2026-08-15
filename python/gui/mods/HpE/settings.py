@@ -1,0 +1,158 @@
+# -*- coding: utf-8 -*-
+from .logger import logger
+
+try:
+    from gui.modsSettingsApi import g_modsSettingsApi
+except ImportError:
+    g_modsSettingsApi = None
+
+MOD_LINKAGE = 'me.dictor1488.hpe'
+
+DEFAULTS = {
+    'enabled': True,
+    'colorizeIcons': True,
+    'colorizeHeavy': False,
+    'ltColor': '596E4B',
+    'mtColor': '8B6526',
+    'tdColor': '3D4658',
+    'spgColor': '684940',
+    'heavyColor': '808080'
+}
+
+
+def _normalize_color(value, fallback):
+    try:
+        text = str(value or '').strip().upper().replace('#', '').replace('0X', '')
+        if len(text) != 6:
+            return fallback
+        int(text, 16)
+        return text
+    except Exception:
+        return fallback
+
+
+class HpESettings(object):
+    def __init__(self):
+        self.values = dict(DEFAULTS)
+        self._registered = False
+
+    def initialize(self):
+        if self._registered or g_modsSettingsApi is None:
+            if g_modsSettingsApi is None:
+                logger.info('HpE ModsSettingsAPI is unavailable; using default icon colors')
+            return
+
+        template = {
+            'modDisplayName': u'HpE',
+            'enabled': True,
+            'column1': [
+                {
+                    'type': 'CheckBox',
+                    'text': u'Фарбувати іконки техніки',
+                    'tooltip': u'{HEADER}Фарбування іконок{/HEADER}{BODY}Використовувати власні кольори для класів техніки у вухах команд.{/BODY}',
+                    'value': DEFAULTS['colorizeIcons'],
+                    'varName': 'colorizeIcons'
+                },
+                {
+                    'type': 'ColorChoice',
+                    'text': u'ЛТ — колір іконки',
+                    'tooltip': u'{HEADER}Колір ЛТ{/HEADER}{BODY}Колір іконок легких танків. За замовчуванням #%s.{/BODY}' % DEFAULTS['ltColor'],
+                    'value': DEFAULTS['ltColor'],
+                    'varName': 'ltColor'
+                },
+                {
+                    'type': 'ColorChoice',
+                    'text': u'СТ — колір іконки',
+                    'tooltip': u'{HEADER}Колір СТ{/HEADER}{BODY}Колір іконок середніх танків. За замовчуванням #%s.{/BODY}' % DEFAULTS['mtColor'],
+                    'value': DEFAULTS['mtColor'],
+                    'varName': 'mtColor'
+                },
+                {
+                    'type': 'ColorChoice',
+                    'text': u'ПТ — колір іконки',
+                    'tooltip': u'{HEADER}Колір ПТ{/HEADER}{BODY}Колір іконок ПТ-САУ. За замовчуванням #%s.{/BODY}' % DEFAULTS['tdColor'],
+                    'value': DEFAULTS['tdColor'],
+                    'varName': 'tdColor'
+                }
+            ],
+            'column2': [
+                {
+                    'type': 'ColorChoice',
+                    'text': u'САУ — колір іконки',
+                    'tooltip': u'{HEADER}Колір САУ{/HEADER}{BODY}Колір іконок артилерії. За замовчуванням #%s.{/BODY}' % DEFAULTS['spgColor'],
+                    'value': DEFAULTS['spgColor'],
+                    'varName': 'spgColor'
+                },
+                {
+                    'type': 'CheckBox',
+                    'text': u'Фарбувати ТТ',
+                    'tooltip': u'{HEADER}Фарбування ТТ{/HEADER}{BODY}За замовчуванням важкі танки залишаються штатно сірими. Увімкни, щоб застосувати вибраний нижче колір.{/BODY}',
+                    'value': DEFAULTS['colorizeHeavy'],
+                    'varName': 'colorizeHeavy'
+                },
+                {
+                    'type': 'ColorChoice',
+                    'text': u'ТТ — колір іконки',
+                    'tooltip': u'{HEADER}Колір ТТ{/HEADER}{BODY}Використовується тільки якщо увімкнено «Фарбувати ТТ».{/BODY}',
+                    'value': DEFAULTS['heavyColor'],
+                    'varName': 'heavyColor'
+                }
+            ]
+        }
+
+        try:
+            saved = g_modsSettingsApi.setModTemplate(
+                MOD_LINKAGE,
+                template,
+                self._onSettingsChanged
+            )
+            if saved:
+                self._apply(saved)
+            self._registered = True
+            logger.info('HpE settings registered in ModsSettingsAPI')
+        except Exception:
+            logger.exception('Could not register HpE settings')
+
+    def finalize(self):
+        self._registered = False
+
+    def _apply(self, values):
+        if not values:
+            return
+        if 'enabled' in values:
+            self.values['enabled'] = bool(values['enabled'])
+        if 'colorizeIcons' in values:
+            self.values['colorizeIcons'] = bool(values['colorizeIcons'])
+        if 'colorizeHeavy' in values:
+            self.values['colorizeHeavy'] = bool(values['colorizeHeavy'])
+
+        for key in ('ltColor', 'mtColor', 'tdColor', 'spgColor', 'heavyColor'):
+            if key in values:
+                self.values[key] = _normalize_color(values[key], DEFAULTS[key])
+
+    def _onSettingsChanged(self, linkage, newSettings):
+        if linkage != MOD_LINKAGE:
+            return
+        self._apply(newSettings)
+        try:
+            from .provider import g_provider
+            g_provider.applySettings()
+        except Exception:
+            logger.exception('Could not apply changed HpE settings')
+
+    def isEnabled(self):
+        return bool(self.values.get('enabled', True))
+
+    def iconSettings(self):
+        return (
+            bool(self.values.get('colorizeIcons', True)) and self.isEnabled(),
+            bool(self.values.get('colorizeHeavy', False)),
+            int(self.values.get('ltColor', DEFAULTS['ltColor']), 16),
+            int(self.values.get('mtColor', DEFAULTS['mtColor']), 16),
+            int(self.values.get('tdColor', DEFAULTS['tdColor']), 16),
+            int(self.values.get('spgColor', DEFAULTS['spgColor']), 16),
+            int(self.values.get('heavyColor', DEFAULTS['heavyColor']), 16)
+        )
+
+
+g_settings = HpESettings()
