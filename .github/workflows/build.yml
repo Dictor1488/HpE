@@ -64,7 +64,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\flex-sdk
-          key: flex-sdk-${{ env.FLEX_VERSION }}-hpe-v1
+          key: flex-sdk-${{ env.FLEX_VERSION }}-hpe-v2
 
       - name: Download Apache Flex SDK
         if: steps.cache-flex.outputs.cache-hit != 'true'
@@ -72,16 +72,28 @@ jobs:
         run: |
           $url = 'https://archive.apache.org/dist/flex/${{ env.FLEX_VERSION }}/binaries/apache-flex-sdk-${{ env.FLEX_VERSION }}-bin.zip'
           Invoke-WebRequest -Uri $url -OutFile flex.zip -UseBasicParsing -TimeoutSec 300
+          Remove-Item C:\flex-sdk -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item C:\flex-temp -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path C:\flex-sdk | Out-Null
           Expand-Archive flex.zip -DestinationPath C:\flex-temp -Force
-          $root = Get-ChildItem C:\flex-temp | Select-Object -First 1
-          if ($root.PSIsContainer) {
-            Get-ChildItem $root.FullName | Move-Item -Destination C:\flex-sdk -Force
+
+          $items = @(Get-ChildItem C:\flex-temp)
+          if ($items.Count -eq 1 -and $items[0].PSIsContainer) {
+            Get-ChildItem $items[0].FullName | Move-Item -Destination C:\flex-sdk -Force
           } else {
             Get-ChildItem C:\flex-temp | Move-Item -Destination C:\flex-sdk -Force
           }
+
           Remove-Item flex.zip -Force
           Remove-Item C:\flex-temp -Recurse -Force
+
+          $mxmlc = 'C:\flex-sdk\bin\mxmlc.bat'
+          if (-not (Test-Path $mxmlc)) {
+            Write-Host 'Flex SDK root contents:'
+            Get-ChildItem C:\flex-sdk | Select-Object Name, PSIsContainer
+            throw 'Flex SDK extraction completed but bin/mxmlc.bat is missing'
+          }
+          Write-Host "Flex compiler ready: $mxmlc"
 
       - name: Configure playerglobal
         shell: pwsh
@@ -126,10 +138,8 @@ jobs:
           $args += '--'
           $args += (Resolve-Path 'as3/src_flash/src/HpEPanel.as').Path
 
-          $process = Start-Process -FilePath $mxmlc -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput mxmlc.out -RedirectStandardError mxmlc.err
-          Get-Content mxmlc.out -ErrorAction SilentlyContinue
-          Get-Content mxmlc.err -ErrorAction SilentlyContinue
-          if ($process.ExitCode -ne 0) { throw "AS3 compilation failed with exit code $($process.ExitCode)" }
+          & $mxmlc @args
+          if ($LASTEXITCODE -ne 0) { throw "AS3 compilation failed with exit code $LASTEXITCODE" }
           if (-not (Test-Path 'as3/bin/hpePlayerPanel.swf')) { throw 'SWF output was not created' }
 
       - name: Build wotmod
