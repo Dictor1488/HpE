@@ -16,7 +16,7 @@ package com.dictor.hpe.battle
       public static const BAR_WIDTH:Number =
          SEGMENT_WIDTH * SEGMENT_COUNT + SEGMENT_GAP * (SEGMENT_COUNT - 1);
       public static const BAR_HEIGHT:Number = 5;
-      public static const TEXT_WIDTH:Number = 32;
+      public static const TEXT_WIDTH:Number = 36;
       public static const TEXT_GAP:Number = 7;
       public static const TOTAL_WIDTH:Number = BAR_WIDTH + TEXT_WIDTH + TEXT_GAP;
       public static const TOTAL_HEIGHT:Number = 18;
@@ -43,7 +43,7 @@ package com.dictor.hpe.battle
          _text = new TextField();
 
          _text.defaultTextFormat = new TextFormat(
-            "$UniversCondC", 13, TEXT_COLOR, false, false, false,
+            "$UniversCondC", 15, TEXT_COLOR, false, false, false,
             "", "", "right"
          );
          _text.embedFonts = true;
