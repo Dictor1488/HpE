@@ -36,8 +36,10 @@ class HpESettings(object):
     def __init__(self):
         self.values = dict(DEFAULTS)
         self._registered = False
+        self._uiHooked = False
 
     def initialize(self):
+        self._hookUIReady()
         if self._registered or g_modsSettingsApi is None:
             if g_modsSettingsApi is None:
                 logger.info('HpE ModsSettingsAPI is unavailable; using default settings')
@@ -121,7 +123,24 @@ class HpESettings(object):
         except Exception:
             logger.exception('Could not register HpE settings')
 
+    def _hookUIReady(self):
+        if self._uiHooked:
+            return
+        try:
+            from .player_panel import g_events
+            g_events.onUIReady += self._applyDisplayToFlash
+            self._uiHooked = True
+        except Exception:
+            logger.exception('Could not hook HpE settings to UI ready')
+
     def finalize(self):
+        if self._uiHooked:
+            try:
+                from .player_panel import g_events
+                g_events.onUIReady -= self._applyDisplayToFlash
+            except Exception:
+                pass
+        self._uiHooked = False
         self._registered = False
 
     def _apply(self, values):
@@ -140,10 +159,18 @@ class HpESettings(object):
             if key in values:
                 self.values[key] = _normalize_color(values[key], DEFAULTS[key])
 
+    def _applyDisplayToFlash(self, *args):
+        try:
+            from .player_panel import g_events
+            g_events.setDisplaySettings(*self.displaySettings())
+        except Exception:
+            logger.exception('Could not apply HpE display settings to Flash')
+
     def _onSettingsChanged(self, linkage, newSettings):
         if linkage != MOD_LINKAGE:
             return
         self._apply(newSettings)
+        self._applyDisplayToFlash()
         try:
             from .provider import g_provider
             g_provider.applySettings()
