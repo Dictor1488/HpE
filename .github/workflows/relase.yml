@@ -9,7 +9,7 @@ on:
       version:
         description: 'Mod version'
         required: true
-        default: '0.1.4'
+        default: '1.6'
       build_swf:
         description: 'Build SWF files'
         required: true
