@@ -70,7 +70,8 @@ def make_meta(info):
 
 
 def zip_folder(source, destination):
-    with zipfile.ZipFile(str(destination), 'w', zipfile.ZIP_DEFLATED) as archive:
+    # WoT's .wotmod loader expects entries stored without DEFLATE compression.
+    with zipfile.ZipFile(str(destination), 'w', zipfile.ZIP_STORED) as archive:
         for path in Path(source).rglob('*'):
             if path.is_file():
                 archive.write(str(path), str(path.relative_to(source)).replace('\\', '/'))
