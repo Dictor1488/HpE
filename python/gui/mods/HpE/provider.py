@@ -1,11 +1,28 @@
 # -*- coding: utf-8 -*-
 import BigWorld
+import Keys
 from Avatar import PlayerAvatar
 from helpers import dependency
 from skeletons.gui.battle_session import IBattleSessionProvider
 
 from .logger import logger
 from .player_panel import g_events
+
+
+def _resolve_keys(*names):
+    result = set()
+    for name in names:
+        value = getattr(Keys, name, None)
+        if value is not None:
+            result.add(value)
+    return result
+
+
+_ALT_KEYS = _resolve_keys('KEY_LALT', 'KEY_RALT', 'KEY_ALT')
+_CTRL_KEYS = _resolve_keys(
+    'KEY_LCONTROL', 'KEY_RCONTROL', 'KEY_CONTROL',
+    'KEY_LCTRL', 'KEY_RCTRL', 'KEY_CTRL'
+)
 
 
 class HealthProvider(object):
@@ -19,6 +36,12 @@ class HealthProvider(object):
         self._callback = None
         self._session = 0
         self._subscribed = []
+
+        self._altDown = False
+        self._ctrlDown = False
+        self._alwaysShow = False
+        self._comboLatch = False
+
         try:
             g_events.onUIReady += self._onUIReady
         except Exception:
@@ -28,6 +51,7 @@ class HealthProvider(object):
         self._session += 1
         session = self._session
         self.stop(clear_session=False)
+        self._resetHotkeys(reset_always=True)
         self._tryStart(session, 0)
 
     def stop(self, clear_session=True):
@@ -44,10 +68,71 @@ class HealthProvider(object):
         self._health.clear()
         self._maxHealth.clear()
         self._vehicleClass.clear()
+        self._resetHotkeys(reset_always=True)
         try:
+            g_events.setVisibility(False)
             g_events.clear()
         except Exception:
             pass
+
+    def _resetHotkeys(self, reset_always=False):
+        self._altDown = False
+        self._ctrlDown = False
+        self._comboLatch = False
+        if reset_always:
+            self._alwaysShow = False
+
+    def _keyName(self, key):
+        try:
+            return str(BigWorld.keyToString(key)).upper().replace('KEY_', '')
+        except Exception:
+            return ''
+
+    def _isAltKey(self, key):
+        if key in _ALT_KEYS:
+            return True
+        return self._keyName(key) in ('ALT', 'LALT', 'RALT')
+
+    def _isCtrlKey(self, key):
+        if key in _CTRL_KEYS:
+            return True
+        return self._keyName(key) in (
+            'CTRL', 'CONTROL', 'LCTRL', 'RCTRL', 'LCONTROL', 'RCONTROL'
+        )
+
+    def _applyVisibility(self):
+        # ALT alone is momentary. CTRL+ALT is reserved exclusively for the
+        # persistent toggle so switching persistent mode off hides immediately.
+        visible = bool(self._alwaysShow or (self._altDown and not self._ctrlDown))
+        try:
+            g_events.setVisibility(visible)
+        except Exception:
+            logger.exception('Could not update HpE visibility')
+
+    def handleKey(self, isDown, key, mods=0):
+        isAlt = self._isAltKey(key)
+        isCtrl = self._isCtrlKey(key)
+        if not isAlt and not isCtrl:
+            return
+
+        down = bool(isDown)
+        if isAlt:
+            self._altDown = down
+        if isCtrl:
+            self._ctrlDown = down
+
+        combo = self._altDown and self._ctrlDown
+        if combo and down and not self._comboLatch:
+            self._alwaysShow = not self._alwaysShow
+            self._comboLatch = True
+            logger.info(
+                'HpE persistent HP display %s',
+                'enabled' if self._alwaysShow else 'disabled'
+            )
+        elif not combo:
+            self._comboLatch = False
+
+        self._applyVisibility()
 
     def _tryStart(self, session, retry):
         if session != self._session:
@@ -63,6 +148,7 @@ class HealthProvider(object):
             self._buildInitialState()
             self._subscribeArena()
             self._pushAll()
+            self._applyVisibility()
             self._schedulePoll(session)
             logger.info('HpE provider started for %s vehicles', len(self._maxHealth))
         except Exception:
@@ -289,6 +375,7 @@ class HealthProvider(object):
 
     def _onUIReady(self, *args):
         self._pushAll()
+        self._applyVisibility()
 
     def _pushAll(self):
         if self._arena is None:
@@ -338,15 +425,17 @@ class HealthProvider(object):
 g_provider = HealthProvider()
 _origBecomePlayer = None
 _origBecomeNonPlayer = None
+_origHandleKey = None
 _hooksInstalled = False
 
 
 def install_hooks():
-    global _origBecomePlayer, _origBecomeNonPlayer, _hooksInstalled
+    global _origBecomePlayer, _origBecomeNonPlayer, _origHandleKey, _hooksInstalled
     if _hooksInstalled:
         return
     _origBecomePlayer = PlayerAvatar.onBecomePlayer
     _origBecomeNonPlayer = PlayerAvatar.onBecomeNonPlayer
+    _origHandleKey = getattr(PlayerAvatar, 'handleKey', None)
 
     def patchedBecomePlayer(avatar, *args, **kwargs):
         result = _origBecomePlayer(avatar, *args, **kwargs)
@@ -363,8 +452,22 @@ def install_hooks():
             logger.exception('Could not stop HpE provider')
         return _origBecomeNonPlayer(avatar, *args, **kwargs)
 
+    def patchedHandleKey(avatar, isDown, key, mods):
+        result = None
+        if _origHandleKey is not None:
+            result = _origHandleKey(avatar, isDown, key, mods)
+        try:
+            g_provider.handleKey(isDown, key, mods)
+        except Exception:
+            logger.exception('HpE key handler failed')
+        return result
+
     PlayerAvatar.onBecomePlayer = patchedBecomePlayer
     PlayerAvatar.onBecomeNonPlayer = patchedBecomeNonPlayer
+    if _origHandleKey is not None:
+        PlayerAvatar.handleKey = patchedHandleKey
+    else:
+        logger.warning('PlayerAvatar.handleKey is unavailable; HpE hotkeys are disabled')
     _hooksInstalled = True
 
 
@@ -380,4 +483,6 @@ def remove_hooks():
         PlayerAvatar.onBecomePlayer = _origBecomePlayer
     if _origBecomeNonPlayer is not None:
         PlayerAvatar.onBecomeNonPlayer = _origBecomeNonPlayer
+    if _origHandleKey is not None:
+        PlayerAvatar.handleKey = _origHandleKey
     _hooksInstalled = False
