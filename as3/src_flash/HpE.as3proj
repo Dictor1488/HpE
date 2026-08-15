@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project version="2">
+  <output>
+    <movie outputType="Application" />
+    <movie input="" />
+    <movie path="hpePlayerPanel.swf" />
+    <movie fps="30" />
+    <movie width="1024" />
+    <movie height="768" />
+    <movie version="32" />
+    <movie minorVersion="0" />
+    <movie platform="Flash Player" />
+    <movie background="#000000" />
+  </output>
+  <classpaths>
+    <class path="src" />
+  </classpaths>
+  <build>
+    <option accessible="False" />
+    <option optimize="True" />
+    <option showActionScriptWarnings="True" />
+    <option strict="True" />
+    <option warnings="True" />
+    <option additional="-swf-version=39" />
+  </build>
+  <compileTargets>
+    <compile path="src/HpEPanel.as" />
+  </compileTargets>
+</project>
