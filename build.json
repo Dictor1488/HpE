@@ -1,0 +1,9 @@
+{
+  "python2": "",
+  "info": {
+    "id": "me.dictor1488.hpe",
+    "version": "0.1.0",
+    "name": "HpE",
+    "description": "Vehicle HP bars and HP values in the battle players panels"
+  }
+}
