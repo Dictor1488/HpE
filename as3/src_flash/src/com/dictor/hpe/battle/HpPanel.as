@@ -17,7 +17,7 @@ package com.dictor.hpe.battle
       private static const DEFAULT_HEAVY_COLOR:uint = 0x808080;
 
       // Keep the HP block clearly separated from the stock vehicle silhouette.
-      private static const HP_COLUMN_OFFSET:Number = 88;
+      private static const HP_COLUMN_OFFSET:Number = 100;
       private static const FALLBACK_INNER_MARGIN:Number = 4;
 
       private var _data:Dictionary;
@@ -26,6 +26,7 @@ package com.dictor.hpe.battle
       private var _frame:int = 0;
       private var _disposed:Boolean = false;
       private var _showHealth:Boolean = false;
+      private var _showHpBars:Boolean = true;
 
       private var _colorizeIcons:Boolean = true;
       private var _colorizeHeavy:Boolean = false;
@@ -149,6 +150,7 @@ package com.dictor.hpe.battle
             row = new HealthRow();
             row.name = "hpeHealth_" + vehicleID;
             row.visible = false;
+            row.setShowBar(_showHpBars);
             _rows[vehicleID] = row;
          }
 
@@ -183,12 +185,13 @@ package com.dictor.hpe.battle
          var icon:DisplayObject = member(item, "vehicleIcon") as DisplayObject;
          var vehicleTF:DisplayObject = member(item, "vehicleTF") as DisplayObject;
          var anchor:DisplayObject = icon ? icon : vehicleTF;
+         var width:Number = row.contentWidth;
 
          if (anchor)
          {
             row.x = Math.round(
                enemy
-                  ? anchor.x - HP_COLUMN_OFFSET - HealthRow.TOTAL_WIDTH
+                  ? anchor.x - HP_COLUMN_OFFSET - width
                   : anchor.x + HP_COLUMN_OFFSET
             );
             row.y = Math.round(anchor.y);
@@ -208,7 +211,7 @@ package com.dictor.hpe.battle
                   ? FALLBACK_INNER_MARGIN
                   : Math.max(
                        FALLBACK_INNER_MARGIN,
-                       itemWidth - HealthRow.TOTAL_WIDTH - FALLBACK_INNER_MARGIN
+                       itemWidth - width - FALLBACK_INNER_MARGIN
                     )
             );
             row.y = 0;
@@ -366,6 +369,7 @@ package com.dictor.hpe.battle
 
          var enemy:Boolean = isEnemy(vehicleID);
          row = ensureRow(vehicleID, item);
+         row.setShowBar(_showHpBars);
          row.updateHealth(int(data.currentHealth), int(data.maxHealth), enemy);
          positionRow(vehicleID, item, row, enemy);
          applyIconColor(item, String(data.vehicleClass));
@@ -402,6 +406,19 @@ package com.dictor.hpe.battle
          _tdColor = tdColor;
          _spgColor = spgColor;
          _heavyColor = heavyColor;
+         as_refreshAll();
+      }
+
+      public function as_setDisplaySettings(showHpBars:Boolean):void
+      {
+         if (_disposed)
+            return;
+         _showHpBars = showHpBars;
+         for each (var row:HealthRow in _rows)
+         {
+            if (row)
+               row.setShowBar(_showHpBars);
+         }
          as_refreshAll();
       }
 
