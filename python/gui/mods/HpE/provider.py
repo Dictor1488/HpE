@@ -7,6 +7,7 @@ from skeletons.gui.battle_session import IBattleSessionProvider
 
 from .logger import logger
 from .player_panel import g_events
+from .settings import g_settings
 
 
 def _resolve_keys(*names):
@@ -101,9 +102,10 @@ class HealthProvider(object):
         )
 
     def _applyVisibility(self):
-        # ALT alone is momentary. CTRL+ALT is reserved exclusively for the
-        # persistent toggle so switching persistent mode off hides immediately.
-        visible = bool(self._alwaysShow or (self._altDown and not self._ctrlDown))
+        visible = bool(
+            g_settings.isEnabled() and
+            (self._alwaysShow or (self._altDown and not self._ctrlDown))
+        )
         try:
             g_events.setVisibility(visible)
         except Exception:
@@ -133,6 +135,14 @@ class HealthProvider(object):
             self._comboLatch = False
 
         self._applyVisibility()
+
+    def applySettings(self):
+        try:
+            g_events.setIconSettings(*g_settings.iconSettings())
+            self._applyVisibility()
+            g_events.refreshAll()
+        except Exception:
+            logger.exception('Could not apply HpE settings')
 
     def _tryStart(self, session, retry):
         if session != self._session:
@@ -380,6 +390,7 @@ class HealthProvider(object):
     def _pushAll(self):
         if self._arena is None:
             return
+        g_events.setIconSettings(*g_settings.iconSettings())
         for vehicleID, maxHealth in self._maxHealth.items():
             g_events.setVehicleHealth(
                 vehicleID,
