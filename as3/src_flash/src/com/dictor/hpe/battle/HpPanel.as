@@ -3,9 +3,7 @@ package com.dictor.hpe.battle
    import flash.display.DisplayObject;
    import flash.display.DisplayObjectContainer;
    import flash.events.Event;
-   import flash.events.KeyboardEvent;
    import flash.geom.ColorTransform;
-   import flash.geom.Rectangle;
    import flash.utils.Dictionary;
 
    import com.dictor.hpe.injector.BattleDisplayable;
@@ -17,21 +15,18 @@ package com.dictor.hpe.battle
       private static const TD_COLOR:uint = 0x3D4658;
       private static const SPG_COLOR:uint = 0x684940;
 
-      private static const KEY_ALT:uint = 18;
-      private static const KEY_CTRL:uint = 17;
-      private static const ICON_GAP:Number = 4;
+      // The stock vehicle icon has a fixed origin but its visible silhouette has
+      // a different width for every tank.  Anchor to that origin and use a
+      // fixed column offset, otherwise every HP row shifts by a few pixels.
+      private static const HP_COLUMN_OFFSET:Number = 68;
+      private static const FALLBACK_INNER_MARGIN:Number = 4;
 
       private var _data:Dictionary;
       private var _rows:Dictionary;
       private var _iconTransforms:Dictionary;
       private var _frame:int = 0;
       private var _disposed:Boolean = false;
-
-      private var _altDown:Boolean = false;
-      private var _ctrlDown:Boolean = false;
-      private var _alwaysShow:Boolean = false;
-      private var _toggleLatch:Boolean = false;
-      private var _keyboardAttached:Boolean = false;
+      private var _showHealth:Boolean = false;
 
       public var flashLogS:Function;
 
@@ -42,11 +37,7 @@ package com.dictor.hpe.battle
          _data = new Dictionary();
          _rows = new Dictionary();
          _iconTransforms = new Dictionary(true);
-
          addEventListener(Event.ENTER_FRAME, onEnterFrame, false, 0, true);
-         addEventListener(Event.ADDED_TO_STAGE, onAddedToStage, false, 0, true);
-         if (stage)
-            attachKeyboard();
       }
 
       private function member(target:*, name:String):*
@@ -150,6 +141,7 @@ package com.dictor.hpe.battle
          {
             row = new HealthRow();
             row.name = "hpeHealth_" + vehicleID;
+            row.visible = false;
             _rows[vehicleID] = row;
          }
 
@@ -160,11 +152,6 @@ package com.dictor.hpe.battle
             DisplayObjectContainer(item).addChild(row);
          }
          return row;
-      }
-
-      private function shouldShowHealth():Boolean
-      {
-         return _alwaysShow || _altDown;
       }
 
       private function itemIsVisible(item:*):Boolean
@@ -192,27 +179,16 @@ package com.dictor.hpe.battle
 
          if (anchor)
          {
-            var bounds:Rectangle = null;
-            try
-            {
-               if (item is DisplayObject)
-                  bounds = anchor.getBounds(DisplayObject(item));
-            }
-            catch (boundsError:Error)
-            {
-               bounds = null;
-            }
-
-            if (bounds && bounds.width > 0 && bounds.height > 0)
-            {
-               row.x = Math.round(enemy ? bounds.x - HealthRow.TOTAL_WIDTH - ICON_GAP : bounds.right + ICON_GAP);
-               row.y = Math.round(bounds.y + (bounds.height - HealthRow.TOTAL_HEIGHT) * 0.5);
-            }
-            else
-            {
-               row.x = Math.round(enemy ? anchor.x - HealthRow.TOTAL_WIDTH - ICON_GAP : anchor.x + anchor.width + ICON_GAP);
-               row.y = Math.round(anchor.y + (anchor.height - HealthRow.TOTAL_HEIGHT) * 0.5);
-            }
+            // Fixed X from the stock icon origin gives one straight HP column.
+            // The right team uses the exact mirror formula.
+            row.x = Math.round(
+               enemy
+                  ? anchor.x - HP_COLUMN_OFFSET - HealthRow.TOTAL_WIDTH
+                  : anchor.x + HP_COLUMN_OFFSET
+            );
+            // Do not center against the silhouette bounds: their heights also
+            // vary by vehicle.  The stock anchor Y is stable for every row.
+            row.y = Math.round(anchor.y);
          }
          else
          {
@@ -224,17 +200,23 @@ package com.dictor.hpe.battle
             catch (e:Error)
             {
             }
-            row.x = Math.round(enemy ? 4 : Math.max(4, itemWidth - HealthRow.TOTAL_WIDTH - 4));
+            row.x = Math.round(
+               enemy
+                  ? FALLBACK_INNER_MARGIN
+                  : Math.max(
+                       FALLBACK_INNER_MARGIN,
+                       itemWidth - HealthRow.TOTAL_WIDTH - FALLBACK_INNER_MARGIN
+                    )
+            );
             row.y = 0;
          }
 
          var data:Object = _data[vehicleID];
-         row.visible = itemIsVisible(item) && shouldShowHealth() && data != null && int(data.maxHealth) > 0;
+         row.visible = _showHealth && itemIsVisible(item) && data != null && int(data.maxHealth) > 0;
       }
 
       private function refreshRowVisibility():void
       {
-         var show:Boolean = shouldShowHealth();
          for (var key:* in _rows)
          {
             var vehicleID:int = int(key);
@@ -244,93 +226,8 @@ package com.dictor.hpe.battle
 
             var item:* = getListItem(vehicleID);
             var data:Object = _data[vehicleID];
-            row.visible = show && itemIsVisible(item) && data != null && int(data.maxHealth) > 0;
+            row.visible = _showHealth && itemIsVisible(item) && data != null && int(data.maxHealth) > 0;
          }
-      }
-
-      private function onAddedToStage(event:Event):void
-      {
-         attachKeyboard();
-      }
-
-      private function attachKeyboard():void
-      {
-         if (_keyboardAttached || !stage)
-            return;
-
-         stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown, false, 0, true);
-         stage.addEventListener(KeyboardEvent.KEY_UP, onKeyUp, false, 0, true);
-         stage.addEventListener(Event.DEACTIVATE, onStageDeactivate, false, 0, true);
-         _keyboardAttached = true;
-      }
-
-      private function detachKeyboard():void
-      {
-         if (!_keyboardAttached || !stage)
-         {
-            _keyboardAttached = false;
-            return;
-         }
-
-         stage.removeEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
-         stage.removeEventListener(KeyboardEvent.KEY_UP, onKeyUp);
-         stage.removeEventListener(Event.DEACTIVATE, onStageDeactivate);
-         _keyboardAttached = false;
-      }
-
-      private function onKeyDown(event:KeyboardEvent):void
-      {
-         if (_disposed)
-            return;
-
-         if (event.keyCode == KEY_ALT)
-            _altDown = true;
-         if (event.keyCode == KEY_CTRL)
-            _ctrlDown = true;
-
-         if (event.altKey)
-            _altDown = true;
-         if (event.ctrlKey)
-            _ctrlDown = true;
-
-         if (_altDown && _ctrlDown)
-         {
-            if (!_toggleLatch)
-            {
-               _alwaysShow = !_alwaysShow;
-               _toggleLatch = true;
-            }
-         }
-         else
-         {
-            _toggleLatch = false;
-         }
-
-         refreshRowVisibility();
-      }
-
-      private function onKeyUp(event:KeyboardEvent):void
-      {
-         if (_disposed)
-            return;
-
-         if (event.keyCode == KEY_ALT)
-            _altDown = false;
-         if (event.keyCode == KEY_CTRL)
-            _ctrlDown = false;
-
-         if (!_altDown || !_ctrlDown)
-            _toggleLatch = false;
-
-         refreshRowVisibility();
-      }
-
-      private function onStageDeactivate(event:Event):void
-      {
-         _altDown = false;
-         _ctrlDown = false;
-         _toggleLatch = false;
-         refreshRowVisibility();
       }
 
       private function cloneTransform(value:ColorTransform):ColorTransform
@@ -473,6 +370,14 @@ package com.dictor.hpe.battle
          applyVehicle(vehicleID);
       }
 
+      public function as_setVisibility(value:Boolean):void
+      {
+         if (_disposed)
+            return;
+         _showHealth = value;
+         refreshRowVisibility();
+      }
+
       public function as_refreshAll():void
       {
          if (_disposed)
@@ -483,6 +388,7 @@ package com.dictor.hpe.battle
 
       public function as_clear():void
       {
+         _showHealth = false;
          for each (var row:HealthRow in _rows)
          {
             if (row && row.parent)
@@ -506,8 +412,6 @@ package com.dictor.hpe.battle
       override protected function onDispose():void
       {
          _disposed = true;
-         detachKeyboard();
-         removeEventListener(Event.ADDED_TO_STAGE, onAddedToStage);
          removeEventListener(Event.ENTER_FRAME, onEnterFrame);
          as_clear();
          super.onDispose();
