@@ -18,7 +18,7 @@ package com.dictor.hpe.battle
       // The stock vehicle icon has a fixed origin but its visible silhouette has
       // a different width for every tank.  Anchor to that origin and use a
       // fixed column offset, otherwise every HP row shifts by a few pixels.
-      private static const HP_COLUMN_OFFSET:Number = 68;
+      private static const HP_COLUMN_OFFSET:Number = 76;
       private static const FALLBACK_INNER_MARGIN:Number = 4;
 
       private var _data:Dictionary;
