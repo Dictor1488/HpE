@@ -10,11 +10,12 @@ package com.dictor.hpe.battle
 
    public class HealthRow extends Sprite
    {
-      public static const BAR_WIDTH:Number = 82;
-      public static const BAR_HEIGHT:Number = 6;
       public static const SEGMENT_COUNT:int = 4;
+      public static const SEGMENT_WIDTH:Number = 19;
       public static const SEGMENT_GAP:Number = 2;
-      public static const SEGMENT_WIDTH:Number = (BAR_WIDTH - SEGMENT_GAP * (SEGMENT_COUNT - 1)) / SEGMENT_COUNT;
+      public static const BAR_WIDTH:Number =
+         SEGMENT_WIDTH * SEGMENT_COUNT + SEGMENT_GAP * (SEGMENT_COUNT - 1);
+      public static const BAR_HEIGHT:Number = 6;
       public static const TEXT_WIDTH:Number = 38;
       public static const TEXT_GAP:Number = 5;
       public static const TOTAL_WIDTH:Number = BAR_WIDTH + TEXT_WIDTH + TEXT_GAP;
@@ -50,6 +51,7 @@ package com.dictor.hpe.battle
          addChild(_fill);
          addChild(_text);
          redraw(1.0);
+         visible = false;
       }
 
       public function updateHealth(currentHealth:int, maxHealth:int, enemy:Boolean):void
@@ -62,7 +64,7 @@ package com.dictor.hpe.battle
          redraw(ratio);
          _text.text = String(currentHealth);
          alpha = currentHealth > 0 ? 1.0 : 0.55;
-         visible = maxHealth > 0;
+         // Visibility is intentionally controlled only by HpPanel.as_setVisibility.
       }
 
       private function redraw(ratio:Number):void
@@ -80,8 +82,9 @@ package com.dictor.hpe.battle
             var visualIndex:int = _enemy ? SEGMENT_COUNT - 1 - i : i;
             var segmentX:Number = barX + visualIndex * pitch;
 
-            _bg.graphics.lineStyle(1, 0x000000, 0.9);
-            _bg.graphics.beginFill(0x151515, 0.82);
+            // Four identical 19x6 rectangles; no lineStyle means the outline
+            // cannot make the outer segments appear wider than the inner ones.
+            _bg.graphics.beginFill(0x1C2224, 0.92);
             _bg.graphics.drawRect(segmentX, barY, SEGMENT_WIDTH, BAR_HEIGHT);
             _bg.graphics.endFill();
 
