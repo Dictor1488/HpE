@@ -41,6 +41,11 @@ class HpPanelMeta(BaseDAAPIComponent):
             )
         return None
 
+    def as_setVisibilityS(self, visible):
+        if self._isDAAPIInited():
+            return self.flashObject.as_setVisibility(bool(visible))
+        return None
+
     def as_refreshAllS(self):
         if self._isDAAPIInited():
             return self.flashObject.as_refreshAll()
@@ -84,6 +89,14 @@ class Events(object):
             )
         except Exception:
             logger.exception('setVehicleHealth failed for %s', vehicleID)
+
+    def setVisibility(self, visible):
+        if self.componentUI is None:
+            return
+        try:
+            self.componentUI.as_setVisibilityS(bool(visible))
+        except Exception:
+            logger.exception('setVisibility failed')
 
     def refreshAll(self):
         if self.componentUI is not None:
