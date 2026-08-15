@@ -10,8 +10,6 @@ package com.dictor.hpe.battle
 
    public class HealthRow extends Sprite
    {
-      // Geometry sampled from the reference: a compact ~60px bar made of four
-      // narrow equal blocks with small gaps between them.
       public static const SEGMENT_COUNT:int = 4;
       public static const SEGMENT_WIDTH:Number = 14;
       public static const SEGMENT_GAP:Number = 2;
@@ -31,6 +29,8 @@ package com.dictor.hpe.battle
       private var _fill:Shape;
       private var _text:TextField;
       private var _enemy:Boolean = false;
+      private var _showBar:Boolean = true;
+      private var _ratio:Number = 1.0;
 
       public function HealthRow()
       {
@@ -59,8 +59,21 @@ package com.dictor.hpe.battle
          addChild(_bg);
          addChild(_fill);
          addChild(_text);
-         redraw(1.0);
+         redraw();
          visible = false;
+      }
+
+      public function get contentWidth():Number
+      {
+         return _showBar ? TOTAL_WIDTH : TEXT_WIDTH;
+      }
+
+      public function setShowBar(value:Boolean):void
+      {
+         if (_showBar == value)
+            return;
+         _showBar = value;
+         redraw();
       }
 
       public function updateHealth(currentHealth:int, maxHealth:int, enemy:Boolean):void
@@ -69,50 +82,51 @@ package com.dictor.hpe.battle
          currentHealth = Math.max(0, currentHealth);
          maxHealth = Math.max(0, maxHealth);
 
-         var ratio:Number = maxHealth > 0
+         _ratio = maxHealth > 0
             ? Math.min(1, Number(currentHealth) / Number(maxHealth))
             : 0;
-         redraw(ratio);
          _text.text = String(currentHealth);
          alpha = currentHealth > 0 ? 1.0 : 0.55;
-         // Visibility is intentionally controlled only by HpPanel.as_setVisibility.
+         redraw();
       }
 
-      private function redraw(ratio:Number):void
+      private function redraw():void
       {
-         var barX:Number = _enemy ? TEXT_WIDTH + TEXT_GAP : 0;
-         var textX:Number = _enemy ? 0 : BAR_WIDTH + TEXT_GAP;
-         var barY:Number = 7;
-         var pitch:Number = SEGMENT_WIDTH + SEGMENT_GAP;
-
          _bg.graphics.clear();
          _fill.graphics.clear();
 
-         for (var i:int = 0; i < SEGMENT_COUNT; ++i)
+         var textX:Number = 0;
+
+         if (_showBar)
          {
-            var visualIndex:int = _enemy ? SEGMENT_COUNT - 1 - i : i;
-            var segmentX:Number = barX + visualIndex * pitch;
+            var barX:Number = _enemy ? TEXT_WIDTH + TEXT_GAP : 0;
+            textX = _enemy ? 0 : BAR_WIDTH + TEXT_GAP;
+            var barY:Number = 7;
+            var pitch:Number = SEGMENT_WIDTH + SEGMENT_GAP;
 
-            // Empty HP in the source image is blue-grey rather than black.
-            _bg.graphics.beginFill(EMPTY_COLOR, 1.0);
-            _bg.graphics.drawRect(segmentX, barY, SEGMENT_WIDTH, BAR_HEIGHT);
-            _bg.graphics.endFill();
+            for (var i:int = 0; i < SEGMENT_COUNT; ++i)
+            {
+               var visualIndex:int = _enemy ? SEGMENT_COUNT - 1 - i : i;
+               var segmentX:Number = barX + visualIndex * pitch;
 
-            var localFill:Number = ratio * SEGMENT_COUNT - i;
-            localFill = Math.max(0, Math.min(1, localFill));
-            if (localFill <= 0)
-               continue;
+               _bg.graphics.beginFill(EMPTY_COLOR, 1.0);
+               _bg.graphics.drawRect(segmentX, barY, SEGMENT_WIDTH, BAR_HEIGHT);
+               _bg.graphics.endFill();
 
-            var fillWidth:Number = SEGMENT_WIDTH * localFill;
-            var fillX:Number = segmentX;
-            if (_enemy)
-               fillX += SEGMENT_WIDTH - fillWidth;
+               var localFill:Number = _ratio * SEGMENT_COUNT - i;
+               localFill = Math.max(0, Math.min(1, localFill));
+               if (localFill <= 0)
+                  continue;
 
-            // The reference uses a thin pale lime strip with a one-pixel dark
-            // lower edge left visible from the empty segment behind it.
-            _fill.graphics.beginFill(HEALTH_COLOR, 1.0);
-            _fill.graphics.drawRect(fillX, barY, fillWidth, BAR_HEIGHT - 1);
-            _fill.graphics.endFill();
+               var fillWidth:Number = SEGMENT_WIDTH * localFill;
+               var fillX:Number = segmentX;
+               if (_enemy)
+                  fillX += SEGMENT_WIDTH - fillWidth;
+
+               _fill.graphics.beginFill(HEALTH_COLOR, 1.0);
+               _fill.graphics.drawRect(fillX, barY, fillWidth, BAR_HEIGHT - 1);
+               _fill.graphics.endFill();
+            }
          }
 
          _text.x = textX;
