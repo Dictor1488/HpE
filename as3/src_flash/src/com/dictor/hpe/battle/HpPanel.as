@@ -10,15 +10,14 @@ package com.dictor.hpe.battle
 
    public class HpPanel extends BattleDisplayable
    {
-      private static const LT_COLOR:uint = 0x596E4B;
-      private static const MT_COLOR:uint = 0x8B6526;
-      private static const TD_COLOR:uint = 0x3D4658;
-      private static const SPG_COLOR:uint = 0x684940;
+      private static const DEFAULT_LT_COLOR:uint = 0x596E4B;
+      private static const DEFAULT_MT_COLOR:uint = 0x8B6526;
+      private static const DEFAULT_TD_COLOR:uint = 0x3D4658;
+      private static const DEFAULT_SPG_COLOR:uint = 0x684940;
+      private static const DEFAULT_HEAVY_COLOR:uint = 0x808080;
 
-      // The stock vehicle icon has a fixed origin but its visible silhouette has
-      // a different width for every tank.  Anchor to that origin and use a
-      // fixed column offset, otherwise every HP row shifts by a few pixels.
-      private static const HP_COLUMN_OFFSET:Number = 76;
+      // Keep the HP block clearly separated from the stock vehicle silhouette.
+      private static const HP_COLUMN_OFFSET:Number = 88;
       private static const FALLBACK_INNER_MARGIN:Number = 4;
 
       private var _data:Dictionary;
@@ -27,6 +26,14 @@ package com.dictor.hpe.battle
       private var _frame:int = 0;
       private var _disposed:Boolean = false;
       private var _showHealth:Boolean = false;
+
+      private var _colorizeIcons:Boolean = true;
+      private var _colorizeHeavy:Boolean = false;
+      private var _ltColor:uint = DEFAULT_LT_COLOR;
+      private var _mtColor:uint = DEFAULT_MT_COLOR;
+      private var _tdColor:uint = DEFAULT_TD_COLOR;
+      private var _spgColor:uint = DEFAULT_SPG_COLOR;
+      private var _heavyColor:uint = DEFAULT_HEAVY_COLOR;
 
       public var flashLogS:Function;
 
@@ -179,15 +186,11 @@ package com.dictor.hpe.battle
 
          if (anchor)
          {
-            // Fixed X from the stock icon origin gives one straight HP column.
-            // The right team uses the exact mirror formula.
             row.x = Math.round(
                enemy
                   ? anchor.x - HP_COLUMN_OFFSET - HealthRow.TOTAL_WIDTH
                   : anchor.x + HP_COLUMN_OFFSET
             );
-            // Do not center against the silhouette bounds: their heights also
-            // vary by vehicle.  The stock anchor Y is stable for every row.
             row.y = Math.round(anchor.y);
          }
          else
@@ -285,31 +288,41 @@ package com.dictor.hpe.battle
          var original:ColorTransform = getOriginalIconTransform(icon);
          var className:String = vehicleClass ? vehicleClass.toLowerCase() : "";
          var color:uint = 0;
-         var shouldTint:Boolean = true;
+         var shouldTint:Boolean = _colorizeIcons;
 
-         switch (className)
+         if (shouldTint)
          {
-            case "lighttank":
-               color = LT_COLOR;
-               break;
-            case "mediumtank":
-               color = MT_COLOR;
-               break;
-            case "at-spg":
-               color = TD_COLOR;
-               break;
-            case "spg":
-               color = SPG_COLOR;
-               break;
-            case "heavytank":
-            default:
-               shouldTint = false;
-               break;
+            switch (className)
+            {
+               case "lighttank":
+                  color = _ltColor;
+                  break;
+               case "mediumtank":
+                  color = _mtColor;
+                  break;
+               case "at-spg":
+                  color = _tdColor;
+                  break;
+               case "spg":
+                  color = _spgColor;
+                  break;
+               case "heavytank":
+                  if (_colorizeHeavy)
+                     color = _heavyColor;
+                  else
+                     shouldTint = false;
+                  break;
+               default:
+                  shouldTint = false;
+                  break;
+            }
          }
 
          try
          {
-            icon.transform.colorTransform = shouldTint ? tintFromScreenshot(original, color) : cloneTransform(original);
+            icon.transform.colorTransform = shouldTint
+               ? tintFromScreenshot(original, color)
+               : cloneTransform(original);
          }
          catch (e:Error)
          {
@@ -368,6 +381,28 @@ package com.dictor.hpe.battle
             vehicleClass: vehicleClass ? vehicleClass : ""
          };
          applyVehicle(vehicleID);
+      }
+
+      public function as_setIconSettings(
+         enabled:Boolean,
+         colorizeHeavy:Boolean,
+         ltColor:uint,
+         mtColor:uint,
+         tdColor:uint,
+         spgColor:uint,
+         heavyColor:uint
+      ):void
+      {
+         if (_disposed)
+            return;
+         _colorizeIcons = enabled;
+         _colorizeHeavy = colorizeHeavy;
+         _ltColor = ltColor;
+         _mtColor = mtColor;
+         _tdColor = tdColor;
+         _spgColor = spgColor;
+         _heavyColor = heavyColor;
+         as_refreshAll();
       }
 
       public function as_setVisibility(value:Boolean):void
