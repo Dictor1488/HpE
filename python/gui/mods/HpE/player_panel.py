@@ -46,6 +46,11 @@ class HpPanelMeta(BaseDAAPIComponent):
             return self.flashObject.as_setVisibility(bool(visible))
         return None
 
+    def as_setDisplaySettingsS(self, showHpBars):
+        if self._isDAAPIInited():
+            return self.flashObject.as_setDisplaySettings(bool(showHpBars))
+        return None
+
     def as_setIconSettingsS(self, enabled, colorizeHeavy, ltColor, mtColor, tdColor, spgColor, heavyColor):
         if self._isDAAPIInited():
             return self.flashObject.as_setIconSettings(
@@ -110,6 +115,14 @@ class Events(object):
             self.componentUI.as_setVisibilityS(bool(visible))
         except Exception:
             logger.exception('setVisibility failed')
+
+    def setDisplaySettings(self, showHpBars):
+        if self.componentUI is None:
+            return
+        try:
+            self.componentUI.as_setDisplaySettingsS(bool(showHpBars))
+        except Exception:
+            logger.exception('setDisplaySettings failed')
 
     def setIconSettings(self, enabled, colorizeHeavy, ltColor, mtColor, tdColor, spgColor, heavyColor):
         if self.componentUI is None:
