@@ -3,14 +3,21 @@ package com.dictor.hpe.battle
    import flash.display.DisplayObject;
    import flash.display.DisplayObjectContainer;
    import flash.events.Event;
+   import flash.geom.ColorTransform;
    import flash.utils.Dictionary;
 
    import com.dictor.hpe.injector.BattleDisplayable;
 
    public class HpPanel extends BattleDisplayable
    {
+      private static const LT_COLOR:uint = 0x596E4B;
+      private static const MT_COLOR:uint = 0x8B6526;
+      private static const TD_COLOR:uint = 0x3D4658;
+      private static const SPG_COLOR:uint = 0x684940;
+
       private var _data:Dictionary;
       private var _rows:Dictionary;
+      private var _iconTransforms:Dictionary;
       private var _frame:int = 0;
       private var _disposed:Boolean = false;
 
@@ -22,6 +29,7 @@ package com.dictor.hpe.battle
          name = "hpePlayerPanel";
          _data = new Dictionary();
          _rows = new Dictionary();
+         _iconTransforms = new Dictionary(true);
          addEventListener(Event.ENTER_FRAME, onEnterFrame, false, 0, true);
       }
 
@@ -132,7 +140,7 @@ package com.dictor.hpe.battle
          if (row.parent != item && item is DisplayObjectContainer)
          {
             if (row.parent)
-                row.parent.removeChild(row);
+               row.parent.removeChild(row);
             DisplayObjectContainer(item).addChild(row);
          }
          return row;
@@ -178,6 +186,112 @@ package com.dictor.hpe.battle
          }
       }
 
+      private function cloneTransform(value:ColorTransform):ColorTransform
+      {
+         return new ColorTransform(
+            value.redMultiplier,
+            value.greenMultiplier,
+            value.blueMultiplier,
+            value.alphaMultiplier,
+            value.redOffset,
+            value.greenOffset,
+            value.blueOffset,
+            value.alphaOffset
+         );
+      }
+
+      private function getOriginalIconTransform(icon:DisplayObject):ColorTransform
+      {
+         var original:ColorTransform = _iconTransforms[icon] as ColorTransform;
+         if (!original)
+         {
+            original = cloneTransform(icon.transform.colorTransform);
+            _iconTransforms[icon] = original;
+         }
+         return original;
+      }
+
+      private function tintFromScreenshot(original:ColorTransform, color:uint):ColorTransform
+      {
+         var red:Number = ((color >> 16) & 0xFF) / 128.0;
+         var green:Number = ((color >> 8) & 0xFF) / 128.0;
+         var blue:Number = (color & 0xFF) / 128.0;
+
+         return new ColorTransform(
+            original.redMultiplier * red,
+            original.greenMultiplier * green,
+            original.blueMultiplier * blue,
+            original.alphaMultiplier,
+            original.redOffset,
+            original.greenOffset,
+            original.blueOffset,
+            original.alphaOffset
+         );
+      }
+
+      private function applyIconColor(item:*, vehicleClass:String):void
+      {
+         if (!item)
+            return;
+
+         var icon:DisplayObject = member(item, "vehicleIcon") as DisplayObject;
+         if (!icon)
+            return;
+
+         var original:ColorTransform = getOriginalIconTransform(icon);
+         var className:String = vehicleClass ? vehicleClass.toLowerCase() : "";
+         var color:uint = 0;
+         var shouldTint:Boolean = true;
+
+         switch (className)
+         {
+            case "lighttank":
+               color = LT_COLOR;
+               break;
+            case "mediumtank":
+               color = MT_COLOR;
+               break;
+            case "at-spg":
+               color = TD_COLOR;
+               break;
+            case "spg":
+               color = SPG_COLOR;
+               break;
+            case "heavytank":
+            default:
+               shouldTint = false;
+               break;
+         }
+
+         try
+         {
+            icon.transform.colorTransform = shouldTint ? tintFromScreenshot(original, color) : cloneTransform(original);
+         }
+         catch (e:Error)
+         {
+         }
+      }
+
+      private function restoreIconColors():void
+      {
+         for (var key:* in _iconTransforms)
+         {
+            var icon:DisplayObject = key as DisplayObject;
+            var transform:ColorTransform = _iconTransforms[key] as ColorTransform;
+            if (icon && transform)
+            {
+               try
+               {
+                  icon.transform.colorTransform = cloneTransform(transform);
+               }
+               catch (e:Error)
+               {
+               }
+            }
+         }
+         _iconTransforms = new Dictionary(true);
+      }
+
       private function applyVehicle(vehicleID:int):void
       {
          var data:Object = _data[vehicleID];
@@ -197,15 +311,17 @@ package com.dictor.hpe.battle
          row = ensureRow(vehicleID, item);
          row.updateHealth(int(data.currentHealth), int(data.maxHealth), enemy);
          positionRow(vehicleID, item, row, enemy);
+         applyIconColor(item, String(data.vehicleClass));
       }
 
-      public function as_setVehicleHealth(vehicleID:int, currentHealth:int, maxHealth:int):void
+      public function as_setVehicleHealth(vehicleID:int, currentHealth:int, maxHealth:int, vehicleClass:String = ""):void
       {
          if (_disposed || vehicleID <= 0)
             return;
          _data[vehicleID] = {
             currentHealth: Math.max(0, currentHealth),
-            maxHealth: Math.max(0, maxHealth)
+            maxHealth: Math.max(0, maxHealth),
+            vehicleClass: vehicleClass ? vehicleClass : ""
          };
          applyVehicle(vehicleID);
       }
@@ -225,6 +341,7 @@ package com.dictor.hpe.battle
             if (row && row.parent)
                row.parent.removeChild(row);
          }
+         restoreIconColors();
          _rows = new Dictionary();
          _data = new Dictionary();
       }
