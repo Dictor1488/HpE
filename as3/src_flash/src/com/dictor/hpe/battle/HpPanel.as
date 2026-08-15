@@ -17,7 +17,7 @@ package com.dictor.hpe.battle
       private static const DEFAULT_HEAVY_COLOR:uint = 0x808080;
 
       // Keep the HP block clearly separated from the stock vehicle silhouette.
-      private static const HP_COLUMN_OFFSET:Number = 100;
+      private static const HP_COLUMN_OFFSET:Number = 90;
       private static const FALLBACK_INNER_MARGIN:Number = 4;
 
       private var _data:Dictionary;
