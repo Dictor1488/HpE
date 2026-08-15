@@ -1,0 +1,119 @@
+name: HpE 1.6 Build
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+env:
+  FLEX_VERSION: '4.16.1'
+  FLASH_PLAYER_VERSION: '32.0'
+  SWF_VERSION: '39'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python 2.7
+        shell: pwsh
+        run: |
+          choco install python2 -y --no-progress
+          Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+          refreshenv
+          $candidates = @('C:\Python27\python.exe','C:\tools\python2\python.exe','C:\ProgramData\chocolatey\bin\python2.exe')
+          $python2 = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $python2) {
+            $cmd = Get-Command python2.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $python2 = $cmd.Source }
+          }
+          if (-not $python2) { throw 'Python 2.7 executable was not found' }
+          $python2 = (Resolve-Path -LiteralPath $python2).Path
+          "PYTHON2_EXE=$python2" >> $env:GITHUB_ENV
+          & $python2 --version
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Cache Flex SDK
+        id: cache-flex
+        uses: actions/cache@v4
+        with:
+          path: C:\flex-sdk
+          key: flex-sdk-${{ env.FLEX_VERSION }}-hpe-v2
+
+      - name: Download Apache Flex SDK
+        if: steps.cache-flex.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $url = 'https://archive.apache.org/dist/flex/${{ env.FLEX_VERSION }}/binaries/apache-flex-sdk-${{ env.FLEX_VERSION }}-bin.zip'
+          Invoke-WebRequest -Uri $url -OutFile flex.zip -UseBasicParsing -TimeoutSec 300
+          Remove-Item C:\flex-sdk -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item C:\flex-temp -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path C:\flex-sdk | Out-Null
+          Expand-Archive flex.zip -DestinationPath C:\flex-temp -Force
+          $items = @(Get-ChildItem C:\flex-temp)
+          if ($items.Count -eq 1 -and $items[0].PSIsContainer) {
+            Get-ChildItem $items[0].FullName | Move-Item -Destination C:\flex-sdk -Force
+          } else {
+            Get-ChildItem C:\flex-temp | Move-Item -Destination C:\flex-sdk -Force
+          }
+          Remove-Item flex.zip -Force
+          Remove-Item C:\flex-temp -Recurse -Force
+
+      - name: Configure playerglobal
+        shell: pwsh
+        run: |
+          $source = 'as3\libs\playerglobal.swc'
+          $dest = 'C:\flex-sdk\frameworks\libs\player\32.0'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item $source "$dest\playerglobal.swc" -Force
+          Copy-Item $source 'C:\flex-sdk\frameworks\libs\player\playerglobal.swc' -Force
+          $config = 'C:\flex-sdk\frameworks\flex-config.xml'
+          if (Test-Path $config) {
+            $text = Get-Content $config -Raw
+            $text = $text -replace '\{playerglobalHome\}', 'C:/flex-sdk/frameworks/libs/player'
+            $text | Set-Content $config -Encoding UTF8
+          }
+
+      - name: Compile HpE SWF
+        shell: pwsh
+        run: |
+          $mxmlc = 'C:\flex-sdk\bin\mxmlc.bat'
+          New-Item -ItemType Directory -Force -Path as3\bin | Out-Null
+          $mxmlcArgs = @('-source-path+=as3/src_flash/src','-output=as3/bin/hpePlayerPanel.swf','-target-player=${{ env.FLASH_PLAYER_VERSION }}','-swf-version=${{ env.SWF_VERSION }}','-strict=true','-optimize=true','-warnings=true')
+          Get-ChildItem as3\libs -Filter *.swc | ForEach-Object {
+            if ($_.Name -eq 'playerglobal.swc') { $mxmlcArgs += "-library-path+=$($_.FullName)" }
+            else { $mxmlcArgs += "-external-library-path+=$($_.FullName)" }
+          }
+          $mxmlcArgs += '--'
+          $mxmlcArgs += (Resolve-Path 'as3/src_flash/src/HpEPanel.as').Path
+          & $mxmlc @mxmlcArgs
+          if ($LASTEXITCODE -ne 0) { throw "AS3 compilation failed: $LASTEXITCODE" }
+
+      - name: Build wotmod
+        shell: pwsh
+        run: python build.py
+
+      - name: Upload to v1.6 release
+        uses: ncipollo/release-action@v1.14.0
+        with:
+          tag: v1.6
+          commit: ${{ github.sha }}
+          artifacts: 'build/*.wotmod'
+          allowUpdates: true
+          removeArtifacts: true
+          makeLatest: true
+          token: ${{ secrets.GITHUB_TOKEN }}
