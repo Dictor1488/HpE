@@ -118,7 +118,7 @@ jobs:
           if (-not (Test-Path $mxmlc)) { throw 'mxmlc.bat was not found' }
           New-Item -ItemType Directory -Force -Path as3\bin | Out-Null
 
-          $args = @(
+          $mxmlcArgs = @(
             '-source-path+=as3/src_flash/src',
             '-output=as3/bin/hpePlayerPanel.swf',
             '-target-player=${{ env.FLASH_PLAYER_VERSION }}',
@@ -128,17 +128,20 @@ jobs:
             '-warnings=true'
           )
 
+          $libArgs = @()
           Get-ChildItem as3\libs -Filter *.swc | ForEach-Object {
+            Write-Host "Using SWC: $($_.Name)"
             if ($_.Name -eq 'playerglobal.swc') {
-              $args += "-library-path+=$($_.FullName)"
+              $libArgs += "-library-path+=$($_.FullName)"
             } else {
-              $args += "-external-library-path+=$($_.FullName)"
+              $libArgs += "-external-library-path+=$($_.FullName)"
             }
           }
-          $args += '--'
-          $args += (Resolve-Path 'as3/src_flash/src/HpEPanel.as').Path
+          $mxmlcArgs += $libArgs
+          $mxmlcArgs += '--'
+          $mxmlcArgs += (Resolve-Path 'as3/src_flash/src/HpEPanel.as').Path
 
-          & $mxmlc @args
+          & $mxmlc @mxmlcArgs
           if ($LASTEXITCODE -ne 0) { throw "AS3 compilation failed with exit code $LASTEXITCODE" }
           if (-not (Test-Path 'as3/bin/hpePlayerPanel.swf')) { throw 'SWF output was not created' }
 
