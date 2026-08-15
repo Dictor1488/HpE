@@ -2,7 +2,7 @@
   "python2": "",
   "info": {
     "id": "me.inq.hpe",
-    "version": "0.1.4",
+    "version": "1.6",
     "name": "HpE",
     "description": "Reference-style mirrored HP display with configurable HP bars and class icon colors"
   }
