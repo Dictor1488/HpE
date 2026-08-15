@@ -2,8 +2,8 @@
   "python2": "",
   "info": {
     "id": "me.dictor1488.hpe",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "name": "HpE",
-    "description": "Reference-style mirrored four-segment vehicle HP display and class-colored vehicle icons"
+    "description": "Reference-style mirrored HP display with configurable class icon colors"
   }
 }
