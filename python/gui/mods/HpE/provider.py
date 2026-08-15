@@ -15,6 +15,7 @@ class HealthProvider(object):
         self._arena = None
         self._health = {}
         self._maxHealth = {}
+        self._vehicleClass = {}
         self._callback = None
         self._session = 0
         self._subscribed = []
@@ -42,6 +43,7 @@ class HealthProvider(object):
         self._arena = None
         self._health.clear()
         self._maxHealth.clear()
+        self._vehicleClass.clear()
         try:
             g_events.clear()
         except Exception:
@@ -106,6 +108,42 @@ class HealthProvider(object):
                 pass
         return 0
 
+    def _getVehicleClass(self, vehicleData):
+        if not vehicleData:
+            return ''
+
+        vehicleType = None
+        try:
+            vehicleType = vehicleData.get('vehicleType')
+        except Exception:
+            pass
+
+        candidates = []
+        if vehicleType is not None:
+            candidates.append(vehicleType)
+            try:
+                descriptor = getattr(vehicleType, 'type', None)
+                if descriptor is not None:
+                    candidates.append(descriptor)
+            except Exception:
+                pass
+
+        for candidate in candidates:
+            try:
+                tags = getattr(candidate, 'tags', None)
+            except Exception:
+                tags = None
+            if not tags:
+                continue
+            for className in ('lightTank', 'mediumTank', 'heavyTank', 'AT-SPG', 'SPG'):
+                try:
+                    if className in tags:
+                        return className
+                except Exception:
+                    pass
+
+        return ''
+
     def _readCurrentHealth(self, vehicleID, defaultValue):
         try:
             entity = BigWorld.entity(int(vehicleID))
@@ -146,6 +184,7 @@ class HealthProvider(object):
     def _buildInitialState(self):
         self._health.clear()
         self._maxHealth.clear()
+        self._vehicleClass.clear()
         for vehicleID, vehicleData in self._arena.vehicles.items():
             try:
                 vehicleID = int(vehicleID)
@@ -156,6 +195,7 @@ class HealthProvider(object):
                 current = min(maxHealth, current)
                 self._maxHealth[vehicleID] = maxHealth
                 self._health[vehicleID] = current
+                self._vehicleClass[vehicleID] = self._getVehicleClass(vehicleData)
             except Exception:
                 logger.exception('Failed to initialize vehicle %s', vehicleID)
 
@@ -187,6 +227,18 @@ class HealthProvider(object):
                 pass
         self._subscribed = []
 
+    def _classForVehicle(self, vehicleID):
+        vehicleClass = self._vehicleClass.get(vehicleID, '')
+        if vehicleClass:
+            return vehicleClass
+        try:
+            vehicleData = self._arena.vehicles.get(vehicleID, {})
+            vehicleClass = self._getVehicleClass(vehicleData)
+            self._vehicleClass[vehicleID] = vehicleClass
+        except Exception:
+            vehicleClass = ''
+        return vehicleClass
+
     def _onVehicleHealthChanged(self, *args):
         if len(args) < 2:
             return
@@ -201,10 +253,16 @@ class HealthProvider(object):
                 vehicleData = self._arena.vehicles.get(vehicleID, {})
                 maxHealth = self._getMaxHealth(vehicleData)
                 self._maxHealth[vehicleID] = maxHealth
+                self._vehicleClass[vehicleID] = self._getVehicleClass(vehicleData)
             except Exception:
                 return
         self._health[vehicleID] = min(maxHealth, newHealth)
-        g_events.setVehicleHealth(vehicleID, self._health[vehicleID], maxHealth)
+        g_events.setVehicleHealth(
+            vehicleID,
+            self._health[vehicleID],
+            maxHealth,
+            self._classForVehicle(vehicleID)
+        )
 
     def _onVehicleKilled(self, *args):
         if not args:
@@ -215,7 +273,12 @@ class HealthProvider(object):
             return
         if vehicleID in self._maxHealth:
             self._health[vehicleID] = 0
-            g_events.setVehicleHealth(vehicleID, 0, self._maxHealth[vehicleID])
+            g_events.setVehicleHealth(
+                vehicleID,
+                0,
+                self._maxHealth[vehicleID],
+                self._classForVehicle(vehicleID)
+            )
 
     def _onVehicleListChanged(self, *args):
         try:
@@ -231,7 +294,12 @@ class HealthProvider(object):
         if self._arena is None:
             return
         for vehicleID, maxHealth in self._maxHealth.items():
-            g_events.setVehicleHealth(vehicleID, self._health.get(vehicleID, maxHealth), maxHealth)
+            g_events.setVehicleHealth(
+                vehicleID,
+                self._health.get(vehicleID, maxHealth),
+                maxHealth,
+                self._classForVehicle(vehicleID)
+            )
         g_events.refreshAll()
 
     def _schedulePoll(self, session):
@@ -253,7 +321,12 @@ class HealthProvider(object):
                 value = min(maxHealth, value)
                 if self._health.get(vehicleID) != value:
                     self._health[vehicleID] = value
-                    g_events.setVehicleHealth(vehicleID, value, maxHealth)
+                    g_events.setVehicleHealth(
+                        vehicleID,
+                        value,
+                        maxHealth,
+                        self._classForVehicle(vehicleID)
+                    )
                     changed = True
             if changed:
                 g_events.refreshAll()
