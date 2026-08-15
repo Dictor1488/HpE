@@ -10,16 +10,22 @@ package com.dictor.hpe.battle
 
    public class HealthRow extends Sprite
    {
+      // Geometry sampled from the reference: a compact ~60px bar made of four
+      // narrow equal blocks with small gaps between them.
       public static const SEGMENT_COUNT:int = 4;
-      public static const SEGMENT_WIDTH:Number = 19;
+      public static const SEGMENT_WIDTH:Number = 14;
       public static const SEGMENT_GAP:Number = 2;
       public static const BAR_WIDTH:Number =
          SEGMENT_WIDTH * SEGMENT_COUNT + SEGMENT_GAP * (SEGMENT_COUNT - 1);
-      public static const BAR_HEIGHT:Number = 6;
-      public static const TEXT_WIDTH:Number = 38;
-      public static const TEXT_GAP:Number = 5;
+      public static const BAR_HEIGHT:Number = 5;
+      public static const TEXT_WIDTH:Number = 32;
+      public static const TEXT_GAP:Number = 7;
       public static const TOTAL_WIDTH:Number = BAR_WIDTH + TEXT_WIDTH + TEXT_GAP;
-      public static const TOTAL_HEIGHT:Number = 20;
+      public static const TOTAL_HEIGHT:Number = 18;
+
+      private static const EMPTY_COLOR:uint = 0x3B4254;
+      private static const HEALTH_COLOR:uint = 0xA8E788;
+      private static const TEXT_COLOR:uint = 0xDDDDDD;
 
       private var _bg:Shape;
       private var _fill:Shape;
@@ -36,7 +42,10 @@ package com.dictor.hpe.battle
          _fill = new Shape();
          _text = new TextField();
 
-         _text.defaultTextFormat = new TextFormat("$UniversCondC", 14, 0xFFFFFF, false, false, false, "", "", "right");
+         _text.defaultTextFormat = new TextFormat(
+            "$UniversCondC", 13, TEXT_COLOR, false, false, false,
+            "", "", "right"
+         );
          _text.embedFonts = true;
          _text.antiAliasType = AntiAliasType.ADVANCED;
          _text.mouseEnabled = false;
@@ -45,7 +54,7 @@ package com.dictor.hpe.battle
          _text.height = TOTAL_HEIGHT;
          _text.width = TEXT_WIDTH;
          _text.autoSize = TextFieldAutoSize.NONE;
-         _text.filters = [new DropShadowFilter(0, 90, 0x000000, 1.0, 2, 2, 2, 1)];
+         _text.filters = [new DropShadowFilter(1, 90, 0x000000, 0.9, 2, 2, 2, 1)];
 
          addChild(_bg);
          addChild(_fill);
@@ -60,7 +69,9 @@ package com.dictor.hpe.battle
          currentHealth = Math.max(0, currentHealth);
          maxHealth = Math.max(0, maxHealth);
 
-         var ratio:Number = maxHealth > 0 ? Math.min(1, Number(currentHealth) / Number(maxHealth)) : 0;
+         var ratio:Number = maxHealth > 0
+            ? Math.min(1, Number(currentHealth) / Number(maxHealth))
+            : 0;
          redraw(ratio);
          _text.text = String(currentHealth);
          alpha = currentHealth > 0 ? 1.0 : 0.55;
@@ -82,9 +93,8 @@ package com.dictor.hpe.battle
             var visualIndex:int = _enemy ? SEGMENT_COUNT - 1 - i : i;
             var segmentX:Number = barX + visualIndex * pitch;
 
-            // Four identical 19x6 rectangles; no lineStyle means the outline
-            // cannot make the outer segments appear wider than the inner ones.
-            _bg.graphics.beginFill(0x1C2224, 0.92);
+            // Empty HP in the source image is blue-grey rather than black.
+            _bg.graphics.beginFill(EMPTY_COLOR, 1.0);
             _bg.graphics.drawRect(segmentX, barY, SEGMENT_WIDTH, BAR_HEIGHT);
             _bg.graphics.endFill();
 
@@ -93,14 +103,15 @@ package com.dictor.hpe.battle
             if (localFill <= 0)
                continue;
 
-            var innerWidth:Number = SEGMENT_WIDTH - 2;
-            var fillWidth:Number = innerWidth * localFill;
-            var fillX:Number = segmentX + 1;
+            var fillWidth:Number = SEGMENT_WIDTH * localFill;
+            var fillX:Number = segmentX;
             if (_enemy)
-               fillX += innerWidth - fillWidth;
+               fillX += SEGMENT_WIDTH - fillWidth;
 
-            _fill.graphics.beginFill(0x67D34A, 1.0);
-            _fill.graphics.drawRect(fillX, barY + 1, fillWidth, BAR_HEIGHT - 2);
+            // The reference uses a thin pale lime strip with a one-pixel dark
+            // lower edge left visible from the empty segment behind it.
+            _fill.graphics.beginFill(HEALTH_COLOR, 1.0);
+            _fill.graphics.drawRect(fillX, barY, fillWidth, BAR_HEIGHT - 1);
             _fill.graphics.endFill();
          }
 
