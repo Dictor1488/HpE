@@ -3,7 +3,9 @@ package com.dictor.hpe.battle
    import flash.display.DisplayObject;
    import flash.display.DisplayObjectContainer;
    import flash.events.Event;
+   import flash.events.KeyboardEvent;
    import flash.geom.ColorTransform;
+   import flash.geom.Rectangle;
    import flash.utils.Dictionary;
 
    import com.dictor.hpe.injector.BattleDisplayable;
@@ -15,11 +17,21 @@ package com.dictor.hpe.battle
       private static const TD_COLOR:uint = 0x3D4658;
       private static const SPG_COLOR:uint = 0x684940;
 
+      private static const KEY_ALT:uint = 18;
+      private static const KEY_CTRL:uint = 17;
+      private static const ICON_GAP:Number = 4;
+
       private var _data:Dictionary;
       private var _rows:Dictionary;
       private var _iconTransforms:Dictionary;
       private var _frame:int = 0;
       private var _disposed:Boolean = false;
+
+      private var _altDown:Boolean = false;
+      private var _ctrlDown:Boolean = false;
+      private var _alwaysShow:Boolean = false;
+      private var _toggleLatch:Boolean = false;
+      private var _keyboardAttached:Boolean = false;
 
       public var flashLogS:Function;
 
@@ -30,7 +42,11 @@ package com.dictor.hpe.battle
          _data = new Dictionary();
          _rows = new Dictionary();
          _iconTransforms = new Dictionary(true);
+
          addEventListener(Event.ENTER_FRAME, onEnterFrame, false, 0, true);
+         addEventListener(Event.ADDED_TO_STAGE, onAddedToStage, false, 0, true);
+         if (stage)
+            attachKeyboard();
       }
 
       private function member(target:*, name:String):*
@@ -146,6 +162,25 @@ package com.dictor.hpe.battle
          return row;
       }
 
+      private function shouldShowHealth():Boolean
+      {
+         return _alwaysShow || _altDown;
+      }
+
+      private function itemIsVisible(item:*):Boolean
+      {
+         if (!item)
+            return false;
+         try
+         {
+            return Boolean(item.visible);
+         }
+         catch (e:Error)
+         {
+         }
+         return true;
+      }
+
       private function positionRow(vehicleID:int, item:*, row:HealthRow, enemy:Boolean):void
       {
          if (!item || !row)
@@ -157,11 +192,27 @@ package com.dictor.hpe.battle
 
          if (anchor)
          {
-            if (enemy)
-               row.x = anchor.x - HealthRow.TOTAL_WIDTH - 5;
+            var bounds:Rectangle = null;
+            try
+            {
+               if (item is DisplayObject)
+                  bounds = anchor.getBounds(DisplayObject(item));
+            }
+            catch (boundsError:Error)
+            {
+               bounds = null;
+            }
+
+            if (bounds && bounds.width > 0 && bounds.height > 0)
+            {
+               row.x = Math.round(enemy ? bounds.x - HealthRow.TOTAL_WIDTH - ICON_GAP : bounds.right + ICON_GAP);
+               row.y = Math.round(bounds.y + (bounds.height - HealthRow.TOTAL_HEIGHT) * 0.5);
+            }
             else
-               row.x = anchor.x + anchor.width + 5;
-            row.y = anchor.y + Math.max(-2, (anchor.height - HealthRow.TOTAL_HEIGHT) * 0.5);
+            {
+               row.x = Math.round(enemy ? anchor.x - HealthRow.TOTAL_WIDTH - ICON_GAP : anchor.x + anchor.width + ICON_GAP);
+               row.y = Math.round(anchor.y + (anchor.height - HealthRow.TOTAL_HEIGHT) * 0.5);
+            }
          }
          else
          {
@@ -173,17 +224,113 @@ package com.dictor.hpe.battle
             catch (e:Error)
             {
             }
-            row.x = enemy ? 4 : Math.max(4, itemWidth - HealthRow.TOTAL_WIDTH - 4);
+            row.x = Math.round(enemy ? 4 : Math.max(4, itemWidth - HealthRow.TOTAL_WIDTH - 4));
             row.y = 0;
          }
 
-         try
+         var data:Object = _data[vehicleID];
+         row.visible = itemIsVisible(item) && shouldShowHealth() && data != null && int(data.maxHealth) > 0;
+      }
+
+      private function refreshRowVisibility():void
+      {
+         var show:Boolean = shouldShowHealth();
+         for (var key:* in _rows)
          {
-            row.visible = item.visible && row.visible;
+            var vehicleID:int = int(key);
+            var row:HealthRow = _rows[key] as HealthRow;
+            if (!row)
+               continue;
+
+            var item:* = getListItem(vehicleID);
+            var data:Object = _data[vehicleID];
+            row.visible = show && itemIsVisible(item) && data != null && int(data.maxHealth) > 0;
          }
-         catch (e2:Error)
+      }
+
+      private function onAddedToStage(event:Event):void
+      {
+         attachKeyboard();
+      }
+
+      private function attachKeyboard():void
+      {
+         if (_keyboardAttached || !stage)
+            return;
+
+         stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown, false, 0, true);
+         stage.addEventListener(KeyboardEvent.KEY_UP, onKeyUp, false, 0, true);
+         stage.addEventListener(Event.DEACTIVATE, onStageDeactivate, false, 0, true);
+         _keyboardAttached = true;
+      }
+
+      private function detachKeyboard():void
+      {
+         if (!_keyboardAttached || !stage)
          {
+            _keyboardAttached = false;
+            return;
          }
+
+         stage.removeEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
+         stage.removeEventListener(KeyboardEvent.KEY_UP, onKeyUp);
+         stage.removeEventListener(Event.DEACTIVATE, onStageDeactivate);
+         _keyboardAttached = false;
+      }
+
+      private function onKeyDown(event:KeyboardEvent):void
+      {
+         if (_disposed)
+            return;
+
+         if (event.keyCode == KEY_ALT)
+            _altDown = true;
+         if (event.keyCode == KEY_CTRL)
+            _ctrlDown = true;
+
+         if (event.altKey)
+            _altDown = true;
+         if (event.ctrlKey)
+            _ctrlDown = true;
+
+         if (_altDown && _ctrlDown)
+         {
+            if (!_toggleLatch)
+            {
+               _alwaysShow = !_alwaysShow;
+               _toggleLatch = true;
+            }
+         }
+         else
+         {
+            _toggleLatch = false;
+         }
+
+         refreshRowVisibility();
+      }
+
+      private function onKeyUp(event:KeyboardEvent):void
+      {
+         if (_disposed)
+            return;
+
+         if (event.keyCode == KEY_ALT)
+            _altDown = false;
+         if (event.keyCode == KEY_CTRL)
+            _ctrlDown = false;
+
+         if (!_altDown || !_ctrlDown)
+            _toggleLatch = false;
+
+         refreshRowVisibility();
+      }
+
+      private function onStageDeactivate(event:Event):void
+      {
+         _altDown = false;
+         _ctrlDown = false;
+         _toggleLatch = false;
+         refreshRowVisibility();
       }
 
       private function cloneTransform(value:ColorTransform):ColorTransform
@@ -359,6 +506,8 @@ package com.dictor.hpe.battle
       override protected function onDispose():void
       {
          _disposed = true;
+         detachKeyboard();
+         removeEventListener(Event.ADDED_TO_STAGE, onAddedToStage);
          removeEventListener(Event.ENTER_FRAME, onEnterFrame);
          as_clear();
          super.onDispose();
