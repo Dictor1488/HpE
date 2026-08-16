@@ -27,6 +27,7 @@ package com.dictor.hpe.battle
       private var _disposed:Boolean = false;
       private var _showHealth:Boolean = false;
       private var _showHpBars:Boolean = true;
+      private var _enemyHpRed:Boolean = false;
 
       private var _colorizeIcons:Boolean = true;
       private var _colorizeHeavy:Boolean = false;
@@ -151,6 +152,7 @@ package com.dictor.hpe.battle
             row.name = "hpeHealth_" + vehicleID;
             row.visible = false;
             row.setShowBar(_showHpBars);
+            row.setEnemyHpRed(_enemyHpRed);
             _rows[vehicleID] = row;
          }
 
@@ -370,6 +372,7 @@ package com.dictor.hpe.battle
          var enemy:Boolean = isEnemy(vehicleID);
          row = ensureRow(vehicleID, item);
          row.setShowBar(_showHpBars);
+         row.setEnemyHpRed(_enemyHpRed);
          row.updateHealth(int(data.currentHealth), int(data.maxHealth), enemy);
          positionRow(vehicleID, item, row, enemy);
          applyIconColor(item, String(data.vehicleClass));
@@ -409,15 +412,19 @@ package com.dictor.hpe.battle
          as_refreshAll();
       }
 
-      public function as_setDisplaySettings(showHpBars:Boolean):void
+      public function as_setDisplaySettings(showHpBars:Boolean, enemyHpRed:Boolean):void
       {
          if (_disposed)
             return;
          _showHpBars = showHpBars;
+         _enemyHpRed = enemyHpRed;
          for each (var row:HealthRow in _rows)
          {
             if (row)
+            {
                row.setShowBar(_showHpBars);
+               row.setEnemyHpRed(_enemyHpRed);
+            }
          }
          as_refreshAll();
       }
