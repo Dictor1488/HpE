@@ -11,6 +11,7 @@ MOD_LINKAGE = 'me.inq.hpe'
 DEFAULTS = {
     'enabled': True,
     'showHpBars': True,
+    'enemyHpRed': False,
     'colorizeIcons': True,
     'colorizeHeavy': False,
     'ltColor': '596E4B',
@@ -55,6 +56,13 @@ class HpESettings(object):
                     'tooltip': u'{HEADER}Смуги HP{/HEADER}{BODY}Вимкни, щоб у вухах залишалося тільки числове значення HP без чотирьох сегментів.{/BODY}',
                     'value': DEFAULTS['showHpBars'],
                     'varName': 'showHpBars'
+                },
+                {
+                    'type': 'CheckBox',
+                    'text': u'HP противників червоним',
+                    'tooltip': u'{HEADER}Червоні HP противників{/HEADER}{BODY}Фарбувати заповнені сегменти HP противників у червоний колір. Числове значення HP залишається сірим.{/BODY}',
+                    'value': DEFAULTS['enemyHpRed'],
+                    'varName': 'enemyHpRed'
                 },
                 {
                     'type': 'CheckBox',
@@ -150,6 +158,8 @@ class HpESettings(object):
             self.values['enabled'] = bool(values['enabled'])
         if 'showHpBars' in values:
             self.values['showHpBars'] = bool(values['showHpBars'])
+        if 'enemyHpRed' in values:
+            self.values['enemyHpRed'] = bool(values['enemyHpRed'])
         if 'colorizeIcons' in values:
             self.values['colorizeIcons'] = bool(values['colorizeIcons'])
         if 'colorizeHeavy' in values:
@@ -181,7 +191,10 @@ class HpESettings(object):
         return bool(self.values.get('enabled', True))
 
     def displaySettings(self):
-        return (bool(self.values.get('showHpBars', True)),)
+        return (
+            bool(self.values.get('showHpBars', True)),
+            bool(self.values.get('enemyHpRed', False))
+        )
 
     def iconSettings(self):
         return (
