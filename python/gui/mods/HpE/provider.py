@@ -52,7 +52,7 @@ class HealthProvider(object):
         self._session += 1
         session = self._session
         self.stop(clear_session=False)
-        self._resetHotkeys(reset_always=True)
+        self._resetHotkeys()
         self._tryStart(session, 0)
 
     def stop(self, clear_session=True):
@@ -69,7 +69,7 @@ class HealthProvider(object):
         self._health.clear()
         self._maxHealth.clear()
         self._vehicleClass.clear()
-        self._resetHotkeys(reset_always=True)
+        self._resetHotkeys()
         try:
             g_events.setVisibility(False)
             g_events.clear()
