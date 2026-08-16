@@ -23,6 +23,7 @@ package com.dictor.hpe.battle
 
       private static const EMPTY_COLOR:uint = 0x3B4254;
       private static const HEALTH_COLOR:uint = 0xA8E788;
+      private static const ENEMY_HEALTH_COLOR:uint = 0xFF4A4A;
       private static const TEXT_COLOR:uint = 0xDDDDDD;
 
       private var _bg:Shape;
@@ -30,6 +31,7 @@ package com.dictor.hpe.battle
       private var _text:TextField;
       private var _enemy:Boolean = false;
       private var _showBar:Boolean = true;
+      private var _enemyHpRed:Boolean = false;
       private var _ratio:Number = 1.0;
 
       public function HealthRow()
@@ -76,6 +78,14 @@ package com.dictor.hpe.battle
          redraw();
       }
 
+      public function setEnemyHpRed(value:Boolean):void
+      {
+         if (_enemyHpRed == value)
+            return;
+         _enemyHpRed = value;
+         redraw();
+      }
+
       public function updateHealth(currentHealth:int, maxHealth:int, enemy:Boolean):void
       {
          _enemy = enemy;
@@ -103,6 +113,7 @@ package com.dictor.hpe.battle
             textX = _enemy ? 0 : BAR_WIDTH + TEXT_GAP;
             var barY:Number = 7;
             var pitch:Number = SEGMENT_WIDTH + SEGMENT_GAP;
+            var fillColor:uint = (_enemy && _enemyHpRed) ? ENEMY_HEALTH_COLOR : HEALTH_COLOR;
 
             for (var i:int = 0; i < SEGMENT_COUNT; ++i)
             {
@@ -123,7 +134,7 @@ package com.dictor.hpe.battle
                if (_enemy)
                   fillX += SEGMENT_WIDTH - fillWidth;
 
-               _fill.graphics.beginFill(HEALTH_COLOR, 1.0);
+               _fill.graphics.beginFill(fillColor, 1.0);
                _fill.graphics.drawRect(fillX, barY, fillWidth, BAR_HEIGHT - 1);
                _fill.graphics.endFill();
             }
