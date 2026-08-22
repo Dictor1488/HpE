@@ -2,7 +2,6 @@ package com.dictor.hpe.battle
 {
    import flash.display.DisplayObject;
    import flash.display.DisplayObjectContainer;
-   import flash.events.Event;
    import flash.geom.ColorTransform;
    import flash.utils.Dictionary;
 
@@ -23,7 +22,7 @@ package com.dictor.hpe.battle
       private var _data:Dictionary;
       private var _rows:Dictionary;
       private var _iconTransforms:Dictionary;
-      private var _frame:int = 0;
+      private var _iconColors:Dictionary;
       private var _disposed:Boolean = false;
       private var _showHealth:Boolean = false;
       private var _showHpBars:Boolean = true;
@@ -46,7 +45,7 @@ package com.dictor.hpe.battle
          _data = new Dictionary();
          _rows = new Dictionary();
          _iconTransforms = new Dictionary(true);
-         addEventListener(Event.ENTER_FRAME, onEnterFrame, false, 0, true);
+         _iconColors = new Dictionary(true);
       }
 
       private function member(target:*, name:String):*
@@ -323,11 +322,16 @@ package com.dictor.hpe.battle
             }
          }
 
+         var state:String = shouldTint ? ("tint:" + color.toString(16)) : "original";
+         if (_iconColors[icon] === state)
+            return;
+
          try
          {
             icon.transform.colorTransform = shouldTint
                ? tintFromScreenshot(original, color)
                : cloneTransform(original);
+            _iconColors[icon] = state;
          }
          catch (e:Error)
          {
@@ -352,6 +356,7 @@ package com.dictor.hpe.battle
             }
          }
          _iconTransforms = new Dictionary(true);
+         _iconColors = new Dictionary(true);
       }
 
       private function applyVehicle(vehicleID:int):void
@@ -409,6 +414,7 @@ package com.dictor.hpe.battle
          _tdColor = tdColor;
          _spgColor = spgColor;
          _heavyColor = heavyColor;
+         _iconColors = new Dictionary(true);
          as_refreshAll();
       }
 
@@ -434,7 +440,10 @@ package com.dictor.hpe.battle
          if (_disposed)
             return;
          _showHealth = value;
-         refreshRowVisibility();
+         if (_showHealth)
+            as_refreshAll();
+         else
+            refreshRowVisibility();
       }
 
       public function as_refreshAll():void
@@ -458,20 +467,9 @@ package com.dictor.hpe.battle
          _data = new Dictionary();
       }
 
-      private function onEnterFrame(event:Event):void
-      {
-         if (_disposed)
-            return;
-         if (++_frame < 3)
-            return;
-         _frame = 0;
-         as_refreshAll();
-      }
-
       override protected function onDispose():void
       {
          _disposed = true;
-         removeEventListener(Event.ENTER_FRAME, onEnterFrame);
          as_clear();
          super.onDispose();
       }
