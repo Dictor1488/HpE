@@ -42,6 +42,7 @@ class HealthProvider(object):
         self._ctrlDown = False
         self._alwaysShow = False
         self._comboLatch = False
+        self._visible = None
 
         try:
             g_events.onUIReady += self._onUIReady
@@ -70,6 +71,7 @@ class HealthProvider(object):
         self._maxHealth.clear()
         self._vehicleClass.clear()
         self._resetHotkeys()
+        self._visible = None
         try:
             g_events.setVisibility(False)
             g_events.clear()
@@ -101,11 +103,14 @@ class HealthProvider(object):
             'CTRL', 'CONTROL', 'LCTRL', 'RCTRL', 'LCONTROL', 'RCONTROL'
         )
 
-    def _applyVisibility(self):
+    def _applyVisibility(self, force=False):
         visible = bool(
             g_settings.isEnabled() and
             (self._alwaysShow or (self._altDown and not self._ctrlDown))
         )
+        if not force and self._visible is visible:
+            return
+        self._visible = visible
         try:
             g_events.setVisibility(visible)
         except Exception:
@@ -118,10 +123,15 @@ class HealthProvider(object):
             return
 
         down = bool(isDown)
-        if isAlt:
+        changed = False
+        if isAlt and self._altDown != down:
             self._altDown = down
-        if isCtrl:
+            changed = True
+        if isCtrl and self._ctrlDown != down:
             self._ctrlDown = down
+            changed = True
+        if not changed:
+            return
 
         combo = self._altDown and self._ctrlDown
         if combo and down and not self._comboLatch:
@@ -139,7 +149,7 @@ class HealthProvider(object):
     def applySettings(self):
         try:
             g_events.setIconSettings(*g_settings.iconSettings())
-            self._applyVisibility()
+            self._applyVisibility(force=True)
             g_events.refreshAll()
         except Exception:
             logger.exception('Could not apply HpE settings')
@@ -158,7 +168,7 @@ class HealthProvider(object):
             self._buildInitialState()
             self._subscribeArena()
             self._pushAll()
-            self._applyVisibility()
+            self._applyVisibility(force=True)
             self._schedulePoll(session)
             logger.info('HpE provider started for %s vehicles', len(self._maxHealth))
         except Exception:
@@ -385,7 +395,7 @@ class HealthProvider(object):
 
     def _onUIReady(self, *args):
         self._pushAll()
-        self._applyVisibility()
+        self._applyVisibility(force=True)
 
     def _pushAll(self):
         if self._arena is None:
