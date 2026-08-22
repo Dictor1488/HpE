@@ -108,7 +108,7 @@ class HealthProvider(object):
             g_settings.isEnabled() and
             (self._alwaysShow or (self._altDown and not self._ctrlDown))
         )
-        if not force and self._visible is visible:
+        if not force and self._visible == visible:
             return
         self._visible = visible
         try:
